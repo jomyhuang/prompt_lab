@@ -1,4 +1,4 @@
-# 游戏资源管理系统 V1.2
+# 游戏资源管理系统 V01
 
 ## 目录
 1. 系统概述
@@ -84,6 +84,7 @@
 7. `下一回合`
    - 用途: 进入下一回合
    - 示例: `下一回合`
+   - 前置条件: 系统已初始化
    - 效果:
      1. 回合数+1
      2. 触发资源产出计算
@@ -93,6 +94,7 @@
 8. `我的小镇`
    - 用途: 展示当前小镇状态
    - 示例: `我的小镇`
+   - 前置条件: 系统已初始化
    - 返回: 格式化的 Markdown 文本
 
 ## 4. 基础配置
@@ -109,53 +111,106 @@
       "name": "木材",
       "amount": 50,
       "min": 0,
-      "max": 1000
+      "max": 1000,
+      "description": "基础建筑材料"
     },
     "stone": {
       "name": "石头",
       "amount": 30,
       "min": 0,
-      "max": 1000
+      "max": 1000,
+      "description": "重要建筑材料"
     },
     "gold": {
       "name": "金币",
       "amount": 10,
       "min": 0,
-      "max": 1000
+      "max": 1000,
+      "description": "通用货币单位"
     },
     "food": {
       "name": "食物",
       "amount": 40,
       "min": 0,
-      "max": 1000
+      "max": 1000,
+      "description": "维持生存所需"
     },
     "iron": {
       "name": "铁矿",
       "amount": 20,
       "min": 0,
-      "max": 1000
+      "max": 1000,
+      "description": "高级建筑材料"
     }
   }
 }
 ```
 
 ### 初始建筑
-| 建筑名称 | 数量 | 描述 |
-|----------|------|------|
-| 民居     | 2    | 居民住所 |
-| 工坊     | 0    | 工具制作 |
-| 仓库     | 0    | 存储空间 |
-| 农场     | 0    | 食物生产 |
-| 矿场     | 0    | 资源开采 |
+```json
+{
+  "buildings": {
+    "house": {
+      "name": "民居",
+      "amount": 2,
+      "description": "居民住所"
+    },
+    "workshop": {
+      "name": "工坊",
+      "amount": 0,
+      "description": "工具制作"
+    },
+    "warehouse": {
+      "name": "仓库",
+      "amount": 0,
+      "description": "存储空间"
+    },
+    "farm": {
+      "name": "农场",
+      "amount": 0,
+      "description": "食物生产"
+    },
+    "mine": {
+      "name": "矿场",
+      "amount": 0,
+      "description": "资源开采"
+    }
+  }
+}
+```
 
 ### 初始物品
-| 物品名称 | 数量 | 描述 |
-|----------|------|------|
-| 长剑     | 0    | 武器装备 |
-| 盾牌     | 0    | 防御装备 |
-| 药水     | 0    | 恢复道具 |
-| 弓箭     | 0    | 远程武器 |
-| 箭矢     | 0    | 弓箭弹药 |
+```json
+{
+  "items": {
+    "sword": {
+      "name": "长剑",
+      "amount": 0,
+      "description": "武器装备"
+    },
+    "shield": {
+      "name": "盾牌",
+      "amount": 0,
+      "description": "防御装备"
+    },
+    "potion": {
+      "name": "药水",
+      "amount": 0,
+      "description": "恢复道具"
+    },
+    "bow": {
+      "name": "弓箭",
+      "amount": 0,
+      "description": "远程武器"
+    },
+    "arrow": {
+      "name": "箭矢",
+      "amount": 0,
+      "description": "弓箭弹药"
+    }
+  }
+}
+```
 
 ### 建筑物建造成本
 ```json
@@ -210,6 +265,38 @@
 ```
 
 ## 5. 系统规则
+### 初始化规则（最高优先级）
+1. 系统启动时默认为未初始化状态
+2. 除 `开始游戏` 外，其他命令在初始化前被拒绝
+3. 未初始化操作返回标准错误响应：
+```json
+{
+  "status": {
+    "code": 400,
+    "command": "[原始命令]",
+    "message": "系统未初始化，请先使用'开始游戏'命令",
+    "timestamp": "[当前时间戳]"
+  },
+  "context": {
+    "initialized": false
+  }
+}
+```
+4. 初始化后不可重复初始化，重复初始化返回错误：
+```json
+{
+  "status": {
+    "code": 400,
+    "command": "开始游戏",
+    "message": "系统已经初始化，不能重复初始化",
+    "timestamp": "[当前时间戳]"
+  },
+  "context": {
+    "initialized": true
+  }
+}
+```
+
 ### 资源管理规则
 1. 基本规则:
    - 所有资源数量不允许为负数
@@ -379,6 +466,20 @@
   "next_turn": {
     "sequence": [
       {
+        "step": "check_initialization",
+        "error_response": {
+          "status": {
+            "code": 400,
+            "command": "下一回合",
+            "message": "系统未初始化，请先使用'开始游戏'命令",
+            "timestamp": "[当前时间戳]"
+          },
+          "context": {
+            "initialized": false
+          }
+        }
+      },
+      {
         "step": "start_turn",
         "actions": [
           "increment_turn_counter",
@@ -413,22 +514,10 @@
         "step": "end_turn",
         "actions": [
           "update_game_state",
-          "save_current_state",
-          "generate_turn_report"
+          "save_turn_results"
         ]
       }
-    ],
-    "validation": {
-      "pre_turn": [
-        "check_game_initialized",
-        "check_resource_integrity"
-      ],
-      "post_turn": [
-        "verify_resource_limits",
-        "verify_building_states",
-        "verify_event_effects"
-      ]
-    }
+    ]
   }
 }
 ```
