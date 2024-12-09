@@ -14,6 +14,9 @@
             "wood": 100,
             "stone": 50,
             "gold": 200
+        },
+        "buildings": {
+            "outpost": 0
         }
     }
 }
@@ -24,9 +27,9 @@
 {
     "updated_context": {
         "resources": {
-            "wood": 50,
-            "stone": 20,
-            "gold": 100
+            "wood": 70,
+            "stone": 30,
+            "gold": 150
         },
         "buildings": {
             "outpost": 1
@@ -34,8 +37,8 @@
     },
     "process": {
         "action": "建造",
-        "target": "outpost",
-        "message": "消耗木材50,石头30,金币100"
+        "target": "开拓站",
+        "message": "消耗木材30,石头20,金币50"
     },
     "botstatus": true,
     "message": "开拓站建造成功",
@@ -70,8 +73,8 @@
     },
     "process": {
         "action": "建造",
-        "target": "outpost",
-        "message": "资源不足,需要:木材50,石头30,金币100"
+        "target": "开拓站",
+        "message": "资源不足,需要:消耗木材30,石头20,金币50"
     },
     "botstatus": false,
     "message": "资源不足,无法建造",
@@ -85,6 +88,11 @@
 {
     "input": "建造开拓站",
     "context": {
+        "resources": {
+            "wood": 100,
+            "stone": 50,
+            "gold": 200
+        },
         "buildings": {
             "outpost": 3
         },
@@ -99,21 +107,44 @@
 ```json
 {
     "updated_context": {
+        "gameState": {
+            "status": "进行中",
+            "round": 1,
+            "lastEvent": "尝试建造开拓站"
+        },
+        "resources": {
+            "wood": 100,
+            "stone": 50,
+            "gold": 200
+        },
         "buildings": {
-            "outpost": 3
+            "outpost": 3,
+            "house": 0,
+            "workshop": 0,
+            "warehouse": 0,
+            "farm": 0,
+            "mine": 0
+        },
+        "items": {
+            "sword": 0,
+            "shield": 0,
+            "hammer": 0,
+            "shovel": 0
         },
         "limits": {
-            "maxOutpost": 3
+            "maxOutpost": 3,
+            "baseStorage": 100,
+            "warehouseBonus": 0
         }
     },
     "process": {
         "action": "建造",
-        "target": "outpost",
+        "target": "开拓站",
         "message": "已达到开拓站数量上限(3/3)"
     },
     "botstatus": false,
-    "message": "无法建造,已达到上限",
-    "dialogue": "开拓站数量已经达到上限,无法继续建造。请考虑升级或建造其他类型的建筑。"
+    "message": "无法建造：已达到开拓站数量上限",
+    "dialogue": "[机器人194号] *系统发出警告声* \"指挥官，我们已经达到了开拓站的最大数量限制。建议考虑其他类型的建筑。\""
 }
 ```
 
@@ -150,7 +181,7 @@
     },
     "process": {
         "action": "查询",
-        "target": "resources",
+        "target": "资源",
         "message": "当前资源储备情况"
     },
     "botstatus": true,

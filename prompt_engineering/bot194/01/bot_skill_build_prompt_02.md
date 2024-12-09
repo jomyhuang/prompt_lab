@@ -57,44 +57,44 @@
 {
     "updated_context": {
         "gameState": {
-            "status": <String>,
-            "round": <Number>
+            "status": <enum> ["测试数据","未初始化", "未开始", "进行中", "暂停", "结束"],
+            "round": <number>
         },
         "resources": {
-            "wood": <Number>,
-            "stone": <Number>,
-            "iron": <Number>,
-            "gold": <Number>,
-            "food": <Number>
+            "wood": <number>,
+            "stone": <number>,
+            "iron": <number>,
+            "gold": <number>,
+            "food": <number>
         },
         "buildings": {
-            "outpost": <Number>,
-            "house": <Number>,
-            "workshop": <Number>,
-            "warehouse": <Number>,
-            "farm": <Number>,
-            "mine": <Number>
+            "outpost": <number>,
+            "house": <number>,
+            "workshop": <number>,
+            "warehouse": <number>,
+            "farm": <number>,
+            "mine": <number>
         },
         "items": {
-            "sword": <Number>,
-            "shield": <Number>,
-            "hammer": <Number>,
-            "shovel": <Number>
+            "sword": <number>,
+            "shield": <number>,
+            "hammer": <number>,
+            "shovel": <number>
         },
         "limits": {
-            "maxOutpost": <Number>,
-            "baseStorage": <Number>,
-            "warehouseBonus": <Number>
+            "maxOutpost": <number>,
+            "baseStorage": <number>,
+            "warehouseBonus": <number>
         }
     },
     "process": {
-        "action": "建造/查询/管理",
-        "target": "目标建筑/资源",
-        "message": "成本和效果的文本描述"
+        "action": <string>,
+        "target": <string>,
+        "message": <string>
     },
-    "botstatus": <Boolean>,
-    "message": "操作结果说明",
-    "dialogue": "机器人194号的故事对话"
+    "botstatus": <boolean>,
+    "message": <string>,
+    "dialogue": <string>
 }
 ```
 
@@ -285,8 +285,8 @@
         }
     },
     "process": {
-        "action": "build",
-        "target": "outpost",
+        "action": "建设",
+        "target": "开拓站",
         "message": "建造开拓站需要消耗：30木材、20石头、50金币。建成后每回合可产出：2木材、1石头、1食物，同时提供人口容量并解锁新建筑。"
     },
     "botstatus": true,
@@ -333,8 +333,8 @@
         }
     },
     "process": {
-        "action": "build",
-        "target": "outpost",
+        "action": "建设",
+        "target": "开拓站",
         "message": "建造开拓站需要：30木材、20石头、50金币。当前资源不足：缺少20木材、15石头、30金币"
     },
     "botstatus": false,
@@ -381,8 +381,8 @@
         }
     },
     "process": {
-        "action": "build",
-        "target": "outpost",
+        "action": "建造",
+        "target": "开拓站",
         "message": "建造开拓站需要消耗：30木材、20石头、50金币。建成后每回合可产出：2木材、1石头、1食物，同时提供人口容量并解锁新建筑。"
     },
     "botstatus": true,

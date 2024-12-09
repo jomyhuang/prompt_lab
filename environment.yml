@@ -1,0 +1,12 @@
+name: prompt_lab
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+    - langchain-core
+    - langchain-openai
+    - python-dotenv
+    - openai 
