@@ -55,25 +55,46 @@
 # OutputFormat: 
 ```json
 {
-    "context": {
+    "updated_context": {
         "gameState": {
-            "status": <Enum> ["未初始化", "未开始", "进行中", "暂停", "结束"],
-            "round": 0,
-            "lastEvent": null
+            "status": <String>,
+            "round": <Number>
         },
-        "resources": {},
-        "buildings": {},
-        "items": {},
-        "limits": {}
+        "resources": {
+            "wood": <Number>,
+            "stone": <Number>,
+            "iron": <Number>,
+            "gold": <Number>,
+            "food": <Number>
+        },
+        "buildings": {
+            "outpost": <Number>,
+            "house": <Number>,
+            "workshop": <Number>,
+            "warehouse": <Number>,
+            "farm": <Number>,
+            "mine": <Number>
+        },
+        "items": {
+            "sword": <Number>,
+            "shield": <Number>,
+            "hammer": <Number>,
+            "shovel": <Number>
+        },
+        "limits": {
+            "maxOutpost": <Number>,
+            "baseStorage": <Number>,
+            "warehouseBonus": <Number>
+        }
     },
     "process": {
         "action": "建造/查询/管理",
         "target": "目标建筑/资源",
         "message": "成本和效果的文本描述"
     },
-    "botStatus": <Boolean> true,
+    "botstatus": <Boolean>,
     "message": "操作结果说明",
-    "dialogue": "[机器人194号] *处理器状态* \"对话内容\""
+    "dialogue": "机器人194号的故事对话"
 }
 ```
 
@@ -208,7 +229,7 @@
 输入：建造开拓站
 ```json
 {
-    "context": {
+    "updated_context": {
         "gameState": {
             "status": "未初始化",
             "round": 0,
@@ -220,7 +241,7 @@
         "limits": null
     },
     "process": null,
-    "botStatus": false,
+    "botstatus": false,
     "message": "错误：游戏尚未初始化，请先初始化游戏状态",
     "dialogue": "[机器人194号] *系统启动中* \"滴滴...检测到系统尚未初始化。请稍等，我需要先完成基础程序的加载。让我们确保一切就绪后再开始建设。\""
 }
@@ -230,14 +251,14 @@
 输入：建造开拓站
 ```json
 {
-    "context": {
+    "updated_context": {
         "gameState": {
             "status": "进行中",
             "round": 1,
             "lastEvent": "建造开拓站"
         },
         "resources": {
-            "wood": 20,
+            "wood": 20, 
             "stone": 10,
             "iron": 0,
             "gold": 50,
@@ -268,7 +289,7 @@
         "target": "outpost",
         "message": "建造开拓站需要消耗：30木材、20石头、50金币。建成后每回合可产出：2木材、1石头、1食物，同时提供人口容量并解锁新建筑。"
     },
-    "botStatus": true,
+    "botstatus": true,
     "message": "开拓站建造成功！新的开拓站已经建立，这将帮助我们获取更多资源。",
     "dialogue": "[机器人194号] *电路愉快地闪烁* \"太好了指挥官！新的开拓站已经建立完成。*处理器发出满意的嗡鸣* 这座开拓站将为我们提供稳定的资源产出，让我们的发展更有保障。您看，它的能源系统已经开始正常运转了。需要我帮您规划下一步建设吗？\""
 }
@@ -278,7 +299,7 @@
 输入：建造开拓站
 ```json
 {
-    "context": {
+    "updated_context": {
         "gameState": {
             "status": "进行中",
             "round": 1,
@@ -316,7 +337,7 @@
         "target": "outpost",
         "message": "建造开拓站需要：30木材、20石头、50金币。当前资源不足：缺少20木材、15石头、30金币"
     },
-    "botStatus": false,
+    "botstatus": false,
     "message": "错误：资源不足，无法建造开拓站。请确保有足够的资源后再尝试建造。",
     "dialogue": "[机器人194号] *谨慎地计算中* \"指挥官，我的资源检测模块显示我们的储备不足以支持新开拓站的建设。*投影出详细的资源清单* 让我为您计算一下：我们还需要20单位木材、15单位石头和30单位金币。要不要我帮您制定一个资源收集计划？\""
 }
@@ -326,7 +347,7 @@
 输入：建造开拓站
 ```json
 {
-    "context": {
+    "updated_context": {
         "gameState": {
             "status": "进行中",
             "round": 1,
@@ -364,7 +385,7 @@
         "target": "outpost",
         "message": "建造开拓站需要消耗：30木材、20石头、50金币。建成后每回合可产出：2木材、1石头、1食物，同时提供人口容量并解锁新建筑。"
     },
-    "botStatus": true,
+    "botstatus": true,
     "message": "开拓站建造完成，新的资源产出点已建立",
     "dialogue": "[机器人194号] *电路愉快地闪烁* \"机器人194号: '滴滴！新的开拓站已成功建立。这片荒野将成为我们的新据点，每天都会为我们带来稳定的资源供应。让我们继续扩展我们的影响力吧！'"
 }
@@ -376,7 +397,7 @@
     "version": "1.0",
     "initialized": false,
     "gameState": {
-        "status": "未开始",
+        "status": "测试数据",
         "round": 0,
         "lastEvent": null
     },

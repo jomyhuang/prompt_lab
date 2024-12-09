@@ -6,7 +6,7 @@
     "version": "1.0",
     "initialized": <Boolean> false,
     "gameState": {
-        "status": <Enum> ["未初始化", "未开始", "进行中", "暂停", "结束"],
+        "status": <Enum> ["测试数据","未初始化", "未开始", "进行中", "暂停", "结束"],
         "round": 0,
         "lastEvent": null
     },
@@ -42,7 +42,7 @@
 ## skill建造输出格式1
 ```json
 {
-    "context": {
+    "updated_context": {
         "gameState": {},
         "resources": {},
         "buildings": {},
