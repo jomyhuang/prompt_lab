@@ -58,6 +58,7 @@ class PromptTestRunner:
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", self.system_prompt),
         ])
+        print("template loaded" + self.system_prompt)
         print("提示词加载完成，长度：", len(self.system_prompt))
         self.chain = self.prompt | self.chat
 
