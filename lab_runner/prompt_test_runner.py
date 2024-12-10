@@ -25,16 +25,36 @@ class TestResult:
 class PromptTestRunner:
     def __init__(self):
         load_dotenv()
+        model_name = os.getenv("OPENAI_MODEL_NAME", "gpt-3.5-turbo")
+        
+        # 定义文件名配置
+        self.prompt_filename = os.getenv("PROMPT_FILENAME", "bot_skill_build_prompt_02.md")
+        self.test_cases_filename = os.getenv("TEST_CASES_FILENAME", "prompt_test_cases.md")
+        self.prompt_dir = os.getenv("PROMPT_DIR", "prompt_engineering/bot194/01")
+        
+        # 根据不同模型配置合适的参数
+        model_kwargs = {}
+        if "claude" in model_name.lower():
+            model_kwargs = {
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You are a helpful assistant."
+                    }
+                ]
+            }
+        print(model_kwargs)
         self.chat = ChatOpenAI(
-            model_name=os.getenv("OPENAI_MODEL_NAME", "gpt-3.5-turbo"),
+            model_name=model_name,
             temperature=float(os.getenv("TEMPERATURE", "0.7")),
             openai_api_base=os.getenv("OPENAI_API_BASE"),
             openai_api_key=os.getenv("OPENAI_API_KEY"),
-            default_headers={"Content-Type": "application/json"}
+            default_headers={"Content-Type": "application/json"},
+            model_kwargs=model_kwargs
         )
         
         # 从文件加载系统提示词
-        prompt_file = "f:/Projects/prompt_lab/prompt_engineering/bot194/01/bot_skill_build_prompt_02.md"
+        prompt_file = Path(__file__).parent.parent / self.prompt_dir / self.prompt_filename
         print(f"Loading prompt from: {prompt_file}")
         with open(prompt_file, 'r', encoding='utf-8') as f:
             content = f.read()
@@ -42,23 +62,26 @@ class PromptTestRunner:
         # 处理提示词中的变量标记
         content = content.replace("{", "{{").replace("}", "}}")  # 转义所有的花括号
         content = content.replace("{{{{", "{").replace("}}}}", "}")  # 恢复原有的双花括号
-            
+
         # 系统提示词模板
         self.system_prompt = content + f"""
 
 当前输入: {{input}}
 当前上下文: {{context}}
 
-完整输入JSON:
-{{input_json}}
-
-注意：你必须直接返回JSON格式数据，不要在JSON前后添加任何其他文本、对话或说明。
+注意：
+1. 你必须直接返回JSON格式数据，不要在JSON前后添加任何其他文本、对话或说明
+2. 返回的JSON必须是一个完整且有效的JSON对象
+3. 所有字段值必须符合其预期的数据类型（例如：数字、字符串、布尔值、对象等）
+4. 确保所有必需的字段都存在于输出中
+5. 不要在JSON中添加注释
+6. 输出JSON的键值统一使用小写字母
 """
 
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", self.system_prompt),
         ])
-        print("template loaded" + self.system_prompt)
+        print(f"使用模型: {model_name}")
         print("提示词加载完成，长度：", len(self.system_prompt))
         self.chain = self.prompt | self.chat
 
@@ -144,7 +167,14 @@ class PromptTestRunner:
             
             # 解析输出
             try:
-                output = json.loads(result.content)
+                # 清理响应内容，删除 JSON 前后的所有内容
+                content = result.content
+                json_start = content.find('{')
+                json_end = content.rfind('}')
+                if json_start != -1 and json_end != -1:
+                    content = content[json_start:json_end + 1]
+                
+                output = json.loads(content)
                 # 验证输出格式
                 self._validate_output_format(output)
                 # 比较输出
@@ -225,29 +255,20 @@ class PromptTestRunner:
         # 基本字段检查
         if not isinstance(output, dict):
             raise ValueError("Output must be a dictionary")
-            
-        # 检查process字段
-        if "process" in output:
-            process = output["process"]
-            if not isinstance(process, dict):
-                raise ValueError("Process must be a dictionary")
-            if "action" not in process or "target" not in process:
-                raise ValueError("Process must contain 'action' and 'target'")
-                
-        # 检查botstatus字段
-        if "botstatus" in output and not isinstance(output["botstatus"], bool):
-            raise ValueError("botstatus must be a boolean")
-            
-        # 检查对话格式
-        if "dialogue" in output and not output["dialogue"].startswith("[机器人194号]"):
-            raise ValueError("Dialogue must start with [机器人194号]")
+        
+        # 检查必需字段是否存在
+        required_fields = ["updated_context", "process", "botstatus", "message", "dialogue"]
+        for field in required_fields:
+            if field not in output:
+                raise ValueError(f"Missing required field: {field}")
 
 def main():
     # 初始化测试运行器
     runner = PromptTestRunner()
     
     # 加载测试用例
-    test_cases = runner.load_test_cases("f:/Projects/prompt_lab/prompt_engineering/bot194/01/prompt_test_cases.md")
+    test_file = Path(__file__).parent.parent / runner.prompt_dir / runner.test_cases_filename
+    test_cases = runner.load_test_cases(str(test_file))
     
     # 如果没有测试用例，直接返回
     if not test_cases:

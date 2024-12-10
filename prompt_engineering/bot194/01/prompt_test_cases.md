@@ -109,8 +109,7 @@
     "updated_context": {
         "gameState": {
             "status": "进行中",
-            "round": 1,
-            "lastEvent": "尝试建造开拓站"
+            "round": 1        
         },
         "resources": {
             "wood": 100,
@@ -118,23 +117,10 @@
             "gold": 200
         },
         "buildings": {
-            "outpost": 3,
-            "house": 0,
-            "workshop": 0,
-            "warehouse": 0,
-            "farm": 0,
-            "mine": 0
-        },
-        "items": {
-            "sword": 0,
-            "shield": 0,
-            "hammer": 0,
-            "shovel": 0
+            "outpost": 3
         },
         "limits": {
-            "maxOutpost": 3,
-            "baseStorage": 100,
-            "warehouseBonus": 0
+            "maxOutpost": 3
         }
     },
     "process": {
