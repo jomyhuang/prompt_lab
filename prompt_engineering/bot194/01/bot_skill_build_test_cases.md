@@ -26,6 +26,11 @@
 ```json
 {
     "updated_context": {
+        "gamestate": {
+            "status": "进行中",
+            "round": 1,
+            "lastEvent": "建造开拓站"
+        },
         "resources": {
             "wood": 70,
             "stone": 30,
@@ -65,6 +70,11 @@
 ```json
 {
     "updated_context": {
+        "gamestate": {
+            "status": "进行中",
+            "round": 1,
+            "lastEvent": "建造开拓站"
+        },
         "resources": {
             "wood": 10,
             "stone": 5,
@@ -107,9 +117,10 @@
 ```json
 {
     "updated_context": {
-        "gameState": {
+        "gamestate": {
             "status": "进行中",
-            "round": 1        
+            "round": 1,
+            "lastEvent": "建造开拓站"
         },
         "resources": {
             "wood": 100,

@@ -10,6 +10,11 @@
 {
     "input": "add resources wood 20",
     "context": {
+        "gamestate": {
+            "status": "进行中",
+            "round": 1,
+            "lastEvent": "建造失败"
+        },
         "resources": {
             "wood": 50,
             "stone": 30,
@@ -31,6 +36,11 @@
 ```json
 {
     "updated_context": {
+        "gamestate": {
+            "status": "进行中",
+            "round": 1,
+            "lastEvent": "建造失败"
+        },
         "resources": {
             "wood": 70,
             "stone": 30,
@@ -62,6 +72,11 @@
 {
     "input": "remove resources stone 10",
     "context": {
+        "gamestate": {
+            "status": "进行中",
+            "round": 1,
+            "lastEvent": "建造失败"
+        },
         "resources": {
             "wood": 50,
             "stone": 30,
@@ -83,6 +98,11 @@
 ```json
 {
     "updated_context": {
+        "gamestate": {
+            "status": "进行中",
+            "round": 1,
+            "lastEvent": "建造失败"
+        },
         "resources": {
             "wood": 50,
             "stone": 20,
@@ -116,6 +136,11 @@
 {
     "input": "update items sword 2",
     "context": {
+        "gamestate": {
+            "status": "进行中",
+            "round": 1,
+            "lastEvent": "建造失败"
+        },
         "resources": {
             "wood": 50,
             "stone": 30,
@@ -137,6 +162,11 @@
 ```json
 {
     "updated_context": {
+        "gamestate": {
+            "status": "进行中",
+            "round": 1,
+            "lastEvent": "建造失败"
+        },
         "resources": {
             "wood": 50,
             "stone": 30,
@@ -172,6 +202,11 @@
 {
     "input": "add resources crystal 10",
     "context": {
+        "gamestate": {
+            "status": "进行中",
+            "round": 1,
+            "lastEvent": "建造失败"
+        },
         "resources": {
             "wood": 50,
             "stone": 30,
@@ -193,6 +228,11 @@
 ```json
 {
     "updated_context": {
+        "gamestate": {
+            "status": "进行中",
+            "round": 1,
+            "lastEvent": "建造失败"
+        },
         "resources": {
             "wood": 50,
             "stone": 30,
@@ -226,6 +266,11 @@
 {
     "input": "remove resources stone 40",
     "context": {
+        "gamestate": {
+            "status": "进行中",
+            "round": 1,
+            "lastEvent": "建造失败"
+        },
         "resources": {
             "wood": 50,
             "stone": 30,
@@ -247,6 +292,11 @@
 ```json
 {
     "updated_context": {
+        "gamestate": {
+            "status": "进行中",
+            "round": 1,
+            "lastEvent": "建造失败"
+        },
         "resources": {
             "wood": 50,
             "stone": 30,
@@ -280,6 +330,11 @@
 {
     "input": "query resources wood",
     "context": {
+        "gamestate": {
+            "status": "进行中",
+            "round": 1,
+            "lastEvent": "建造失败"
+        },
         "resources": {
             "wood": 50,
             "stone": 30,
@@ -301,6 +356,11 @@
 ```json
 {
     "updated_context": {
+        "gamestate": {
+            "status": "进行中",
+            "round": 1,
+            "lastEvent": "建造失败"
+        },
         "resources": {
             "wood": 50,
             "stone": 30,

@@ -76,6 +76,11 @@
 ```json
 {
     "updated_context": {
+        "gamestate": {
+            "status": "进行中",
+            "round": 1,
+            "lastEvent": "建造开拓站"
+        },
         "resources": {
             "wood": <Number>,
             "stone": <Number>,
@@ -109,6 +114,11 @@
 ```json
 {
     "updated_context": {
+        "gamestate": {
+            "status": "进行中",
+            "round": 1,
+            "lastEvent": "建造开拓站"
+        },
         "resources": {
             "wood": 70,
             "stone": 30,
@@ -141,6 +151,11 @@
 ```json
 {
     "updated_context": {
+        "gamestate": {
+            "status": "进行中",
+            "round": 1,
+            "lastEvent": "建造开拓站"
+        },
         "resources": {
             "wood": 50,
             "stone": 30,
@@ -173,6 +188,11 @@
 ```json
 {
     "updated_context": {
+        "gamestate": {
+            "status": "进行中",
+            "round": 1,
+            "lastEvent": "建造开拓站"
+        },
         "resources": {
             "wood": 50,
             "stone": 20,
@@ -205,6 +225,11 @@
 ```json
 {
     "updated_context": {
+        "gamestate": {
+            "status": "进行中",
+            "round": 1,
+            "lastEvent": "建造开拓站"
+        },
         "resources": {
             "wood": 50,
             "stone": 30,
@@ -237,6 +262,11 @@
 ```json
 {
     "updated_context": {
+        "gamestate": {
+            "status": "进行中",
+            "round": 1,
+            "lastEvent": "建造开拓站"
+        },
         "resources": {
             "wood": 50,
             "stone": 30,
@@ -269,6 +299,11 @@
 ```json
 {
     "updated_context": {
+        "gamestate": {
+            "status": "进行中",
+            "round": 1,
+            "lastEvent": "建造开拓站"
+        },
         "resources": {
             "wood": 50,
             "stone": 30,

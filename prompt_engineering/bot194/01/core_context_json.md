@@ -5,7 +5,7 @@
 {
     "version": "1.0",
     "initialized": <Boolean> false,
-    "gameState": {
+    "gamestate": {
         "status": <Enum> ["测试数据","未初始化", "未开始", "进行中", "暂停", "结束"],
         "round": 0,
         "lastEvent": null
@@ -43,7 +43,7 @@
 ```json
 {
     "updated_context": {
-        "gameState": {},
+        "gamestate": {},
         "resources": {},
         "buildings": {},
         "items": {},

@@ -5,7 +5,7 @@
 {
     "version": "1.0",
     "initialized": false,
-    "gameState": {
+    "gamestate": {
         "status": "未开始",
         "round": 0,
         "lastEvent": null

@@ -54,7 +54,7 @@
 ```json
 {
     "updated_context": {
-        "gameState": {
+        "gamestate": {
             "status": <String>,
             "round": <Number>
         },
@@ -229,7 +229,7 @@
 ```json
 {
     "context": {
-        "gameState": {
+        "gamestate": {
             "status": "未初始化",
             "round": 0,
             "lastEvent": null
@@ -252,7 +252,7 @@
 ```json
 {
     "updated_context": {
-        "gameState": {
+        "gamestate": {
             "status": "进行中",
             "round": 1,
             "lastEvent": "建造开拓站"
@@ -301,7 +301,7 @@
 ```json
 {
     "updated_context": {
-        "gameState": {
+        "gamestate": {
             "status": "进行中",
             "round": 1,
             "lastEvent": "建造失败"
@@ -350,7 +350,7 @@
 ```json
 {
     "updated_context": {
-        "gameState": {
+        "gamestate": {
             "status": "进行中",
             "round": 1,
             "lastEvent": "建造开拓站"
@@ -398,7 +398,7 @@
 {
     "version": "1.0",
     "initialized": false,
-    "gameState": {
+    "gamestate": {
         "status": "测试数据",
         "round": 0,
         "lastEvent": "测试数据"

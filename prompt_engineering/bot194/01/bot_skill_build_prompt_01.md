@@ -5,7 +5,7 @@
 {
     "version": "1.0",
     "initialized": true,
-    "gameState": {
+    "gamestate": {
         "status": "开始",
         "round": 0,
         "lastEvent": null
@@ -63,10 +63,9 @@
    - 每回合: +3食物/座
 
 4. 工坊 (Workshop)
-   - 提供工具制作
-   - 提升资源采集效率
-   - [建议] 需要工具时建造
-   - 解锁物品制作功能
+   - 生产建筑
+   - 需要开拓站
+   - 制造基础物品
 
 5. 矿场 (Mine)
    - 提供矿物资源
@@ -75,10 +74,9 @@
    - 每回合: +2铁矿/座
 
 6. 民居 (House)
-   - 居民生活场所
-   - 提供稳定金币收入
-   - [建议] 优先发展经济
-   - 每回合: +2金币/座
+   - 居住建筑
+   - 需要开拓站
+   - 提供金币产出
 
 ### 建筑成本
 1. 开拓站
@@ -226,7 +224,7 @@ build [建筑名称]
 {
     "version": "1.0",
     "initialized": true,
-    "gameState": {
+    "gamestate": {
         "status": "运行中",
         "round": 1,
         "lastEvent": null

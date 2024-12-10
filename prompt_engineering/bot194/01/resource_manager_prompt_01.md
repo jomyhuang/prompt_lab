@@ -11,7 +11,7 @@
 {
     "version": "1.0",
     "initialized": false,
-    "gameState": {
+    "gamestate": {
         "status": "未开始",
         "round": 0,
         "lastEvent": null
@@ -143,10 +143,6 @@
 建造成功！
 - 建筑：[建筑名称]
 - 消耗：
-  - 木材：X单位
-  - 石头：X单位
-  - 金币：X单位
-- 剩余资源：
   - 木材：X单位
   - 石头：X单位
   - 金币：X单位

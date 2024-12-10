@@ -36,7 +36,7 @@
 
 #### Background（背景）
 - 说明角色的工作环境
-- 定义输出内容的风格
+- 定义输出内���的风格
 - 描述思维处理过程
 
 #### InputFormat（输入格式）
@@ -45,7 +45,7 @@
 {
     "version": "1.0",
     "initialized": <Boolean>,
-    "gameState": {
+    "gamestate": {
         "status": <Enum> ["未初始化", "未开始", "进行中", "暂停", "结束"],
         "round": <Number>,
         "lastEvent": <String>
@@ -110,7 +110,7 @@
 ```json
 {
     "updated_context": {
-        "gameState": {},
+        "gamestate": {},
         "resources": {},
         "buildings": {},
         "items": {},
@@ -141,7 +141,7 @@
 输入示例：
 {
     "initialized": true,
-    "gameState": {
+    "gamestate": {
         "status": "进行中",
         "round": 1
     },
@@ -161,14 +161,14 @@
 输出示例：
 {
     "updated_context": {
-        "gameState": {
+        "gamestate": {
             "status": "进行中",
             "round": 1
         },
         "resources": {
-            "wood": 50,     // 消耗木材 -X
-            "stone": 30,    // 消耗石头 -X
-            "gold": 100     // 消耗金币 -X
+            "wood": 50,
+            "stone": 30,
+            "gold": 100
         },
         "buildings": {
             "outpost": 2

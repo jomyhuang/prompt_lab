@@ -27,29 +27,52 @@ class PromptTestRunner:
         load_dotenv()
         model_name = os.getenv("OPENAI_MODEL_NAME", "gpt-3.5-turbo")
         
-        # 定义文件名配置
-        self.prompt_filename = os.getenv("PROMPT_FILENAME", "bot_skill_build_prompt_02.md")
-        self.test_cases_filename = os.getenv("TEST_CASES_FILENAME", "prompt_test_cases.md")
-        self.prompt_dir = os.getenv("PROMPT_DIR", "prompt_engineering/bot194/01")
+        # 定义提示词目录
+        self.prompt_dir = "prompt_engineering/bot194/01"  # 修改为正确的目录路径
+        
+        # 定义提示词配置映射
+        self.prompt_configs = {
+            "建造系统": {
+                "prompt": "bot_skill_build_prompt_02.md",
+                "test_cases": "bot_skill_build_test_cases.md"
+            },
+            "资源管理": {
+                "prompt": "resource_manager_prompt_02.md",
+                "test_cases": "resource_manager_test_cases.md"
+            },
+            "数组定义": {
+                "prompt": "array_definition_prompt.md",
+                "test_cases": "array_definition_test_cases.md"
+            },
+
+        }
+        
+        # 选择提示词配置
+        self.select_prompt_config()
         
         # 根据不同模型配置合适的参数
-        model_kwargs = {}
+        temperature = float(os.getenv("TEMPERATURE", "0.7"))
+        
+        # 对于 Claude 模型，使用特定的配置
         if "claude" in model_name.lower():
             model_kwargs = {
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": "You are a helpful assistant."
-                    }
-                ]
+                "model": model_name,
+                "max_tokens": 4096,
             }
-        print(model_kwargs)
+            headers = {
+                "Content-Type": "application/json",
+                "anthropic-version": "2023-06-01"
+            }
+        else:
+            model_kwargs = {}
+            headers = None
+
         self.chat = ChatOpenAI(
             model_name=model_name,
-            temperature=float(os.getenv("TEMPERATURE", "0.7")),
+            temperature=temperature,
             openai_api_base=os.getenv("OPENAI_API_BASE"),
             openai_api_key=os.getenv("OPENAI_API_KEY"),
-            default_headers={"Content-Type": "application/json"},
+            default_headers=headers,
             model_kwargs=model_kwargs
         )
         
@@ -83,7 +106,29 @@ class PromptTestRunner:
         ])
         print(f"使用模型: {model_name}")
         print("提示词加载完成，长度：", len(self.system_prompt))
-        self.chain = self.prompt | self.chat
+
+    def select_prompt_config(self):
+        """选择要测试的提示词配置"""
+        print("\n📋 可用的提示词系统：")
+        for i, name in enumerate(self.prompt_configs.keys(), 1):
+            print(f"{i}. {name}")
+        
+        while True:
+            try:
+                choice = input("\n请选择要测试的提示词系统 (1-{}): ".format(len(self.prompt_configs)))
+                choice = int(choice)
+                if 1 <= choice <= len(self.prompt_configs):
+                    selected_name = list(self.prompt_configs.keys())[choice - 1]
+                    config = self.prompt_configs[selected_name]
+                    self.prompt_filename = config["prompt"]
+                    self.test_cases_filename = config["test_cases"]
+                    print(f"\n✅ 已选择: {selected_name}")
+                    print(f"提示词文件: {self.prompt_filename}")
+                    print(f"测试用例文件: {self.test_cases_filename}")
+                    break
+                print(f"❌ 无效的选择，请输入1-{len(self.prompt_configs)}之间的数字")
+            except ValueError:
+                print("❌ 请输入有效的数字")
 
     def load_test_cases(self, test_file_path: str) -> List[TestCase]:
         """从Markdown文件加载测试用例"""
@@ -158,47 +203,59 @@ class PromptTestRunner:
             # 准备输入
             input_json = json.dumps(test_case, ensure_ascii=False, indent=2)
             
-            # 调用chain
-            result = self.chain.invoke({
-                "input": test_case.get("input", ""),
-                "context": json.dumps(test_case.get("context", {}), ensure_ascii=False),
-                "input_json": input_json
-            })
+            # 构建消息格式
+            messages = [
+                {
+                    "role": "system",
+                    "content": self.system_prompt.format(
+                        input=test_case.get("input", ""),
+                        context=json.dumps(test_case.get("context", {}), ensure_ascii=False)
+                    )
+                }
+            ]
             
-            # 解析输出
+            # 调用API
             try:
-                # 清理响应内容，删除 JSON 前后的所有内容
-                content = result.content
-                json_start = content.find('{')
-                json_end = content.rfind('}')
-                if json_start != -1 and json_end != -1:
-                    content = content[json_start:json_end + 1]
+                result = self.chat.invoke(messages)
                 
-                output = json.loads(content)
-                # 验证输出格式
-                self._validate_output_format(output)
-                # 比较输出
-                if self._compare_outputs(output, expected_output):
-                    print(f"✅ 测试通过")
-                    return True
-                else:
-                    print("\n❌ 测试失败")
+                # 解析输出
+                try:
+                    # 清理响应内容，删除 JSON 前后的所有内容
+                    content = result.content
+                    json_start = content.find('{')
+                    json_end = content.rfind('}')
+                    if json_start != -1 and json_end != -1:
+                        content = content[json_start:json_end + 1]
+                    
+                    output = json.loads(content)
+                    # 验证输出格式
+                    self._validate_output_format(output)
+                    # 比较输出
+                    if self._compare_outputs(output, expected_output):
+                        print(f"✅ 测试通过")
+                        return True
+                    else:
+                        print("\n❌ 测试失败")
+                        print("\n测试用例:")
+                        print("输入:")
+                        print(json.dumps(test_case, ensure_ascii=False, indent=2))
+                        print("\n期望输出:")
+                        print(json.dumps(expected_output, ensure_ascii=False, indent=2))
+                        print("\n实际输出:")
+                        print(json.dumps(output, ensure_ascii=False, indent=2))
+                        return False
+                except json.JSONDecodeError:
+                    print(f"\n❌ AI响应不是有效的JSON格式:")
+                    print(result.content)
                     print("\n测试用例:")
                     print("输入:")
                     print(json.dumps(test_case, ensure_ascii=False, indent=2))
                     print("\n期望输出:")
                     print(json.dumps(expected_output, ensure_ascii=False, indent=2))
-                    print("\n实际输出:")
-                    print(json.dumps(output, ensure_ascii=False, indent=2))
                     return False
-            except json.JSONDecodeError:
-                print(f"\n❌ AI响应不是有效的JSON格式:")
-                print(result.content)
-                print("\n测试用例:")
-                print("输入:")
-                print(json.dumps(test_case, ensure_ascii=False, indent=2))
-                print("\n期望输出:")
-                print(json.dumps(expected_output, ensure_ascii=False, indent=2))
+                    
+            except Exception as e:
+                print(f"\n❌ API调用错误: {str(e)}")
                 return False
                 
         except Exception as e:
@@ -222,7 +279,7 @@ class PromptTestRunner:
                 
                 if isinstance(expected_value, dict):
                     if not isinstance(actual_value, dict):
-                        print(f"❌ 字段类型不匹配 {path}{key}")
+                        print(f"字段类型不匹配 {path}{key}")
                         return False
                     if not compare_dicts(actual_value, expected_value, f"{path}{key}."):
                         return False
@@ -247,7 +304,7 @@ class PromptTestRunner:
                     
             return True
             
-        # 只检查测试用例中存在的字段
+        # 检查测试用例中存在的字段
         return compare_dicts(actual, expected)
 
     def _validate_output_format(self, output: Dict[str, Any]):
@@ -262,6 +319,59 @@ class PromptTestRunner:
             if field not in output:
                 raise ValueError(f"Missing required field: {field}")
 
+    def run_model_tests(self, model_name: str, test_cases: List[TestCase]) -> Dict[str, Any]:
+        """运行单个模型的所有测试用例并返回结果"""
+        # 设置模型
+        os.environ["OPENAI_MODEL_NAME"] = model_name
+        print(f"\n🔄 开始测试模型: {model_name}")
+        
+        # 重新初始化 chat 实例
+        if "claude" in model_name.lower():
+            model_kwargs = {
+                "model": model_name,
+                "max_tokens": 4096,
+            }
+            headers = {
+                "Content-Type": "application/json",
+                "anthropic-version": "2023-06-01"
+            }
+        else:
+            model_kwargs = {}
+            headers = None
+
+        self.chat = ChatOpenAI(
+            model_name=model_name,
+            temperature=float(os.getenv("TEMPERATURE", "0.7")),
+            openai_api_base=os.getenv("OPENAI_API_BASE"),
+            openai_api_key=os.getenv("OPENAI_API_KEY"),
+            default_headers=headers,
+            model_kwargs=model_kwargs
+        )
+        
+        results = []
+        for test_case in test_cases:
+            print(f"\n🔄 运行测试用例: {test_case.name}")
+            result = self.run_test(test_case.input_data, test_case.expected_output)
+            results.append(result)
+            
+            if result:
+                print("✅ 测试通过")
+            else:
+                print("❌ 测试失败")
+        
+        # 计算统计数据
+        total = len(results)
+        passed = sum(1 for r in results if r)
+        pass_rate = (passed/total)*100 if total > 0 else 0
+        
+        return {
+            "model": model_name,
+            "total": total,
+            "passed": passed,
+            "failed": total - passed,
+            "pass_rate": pass_rate
+        }
+
 def main():
     # 初始化测试运行器
     runner = PromptTestRunner()
@@ -274,28 +384,80 @@ def main():
     if not test_cases:
         print("\n❌ 没有可执行的测试用例，程序退出")
         return
-            
-    # 运行测试
-    results = []
-    for test_case in test_cases:
-        print(f"\n🔄 运行测试用例: {test_case.name}")
-        result = runner.run_test(test_case.input_data, test_case.expected_output)
-        results.append(result)
-        
-        if result:
-            print("✅ 测试通过")
-        else:
-            print("❌ 测试失败")
     
-    # 输出测试统计
-    total = len(results)
-    passed = sum(1 for r in results if r)
-    print(f"\n📊 测试总结:")
-    print(f"总数: {total}")
-    print(f"通过: {passed}")
-    print(f"失败: {total - passed}")
-    if total > 0:
-        print(f"通过率: {(passed/total)*100:.2f}%")
+    # 单选模型列表
+    selectable_models = [
+        "moonshot-v1-32k",
+        "Doubao-pro-128k",
+        "gpt-3.5-turbo",
+        "claude-3-sonnet-20240229",
+        "gpt-4-turbo",
+        "qwen-max",
+        "glm-4"
+    ]
+    
+    # 完整测试模型列表（当选择"测试所有模型"时使用）
+    all_test_models = [
+        "moonshot-v1-32k",
+        "Doubao-pro-128k",
+        "gpt-4-turbo"
+    ]
+    
+    # 显示模型列表
+    print("\n📋 可用的模型：")
+    for i, model in enumerate(selectable_models, 1):
+        print(f"{i}. {model}")
+    print("0. 测试baseline模型")
+    
+    # 获取用户选择的模型
+    while True:
+        try:
+            model_choice = input("\n请选择要测试的模型编号 (0-{}): ".format(len(selectable_models)))
+            model_choice = int(model_choice)
+            if 0 <= model_choice <= len(selectable_models):
+                break
+            print(f"❌ 无效的选择，请输入0-{len(selectable_models)}之间的数字")
+        except ValueError:
+            print("❌ 请输入有效的数字")
+    
+    # 显示测试用例列表
+    print("\n📋 可用的测试用例：")
+    for i, test_case in enumerate(test_cases, 1):
+        print(f"{i}. {test_case.name}")
+    print("0. 运行所有测试用例")
+    
+    # 获取用户选择
+    while True:
+        try:
+            choice = input("\n请选择要运行的测试用例编号 (0-{}): ".format(len(test_cases)))
+            choice = int(choice)
+            if 0 <= choice <= len(test_cases):
+                break
+            print(f"❌ 无效的选择，请输入0-{len(test_cases)}之间的数字")
+        except ValueError:
+            print("❌ 请输入有效的数字")
+    
+    # 准备要运行的测试用例
+    selected_test_cases = test_cases if choice == 0 else [test_cases[choice - 1]]
+    
+    # 准备要测试的模型
+    selected_models = all_test_models if model_choice == 0 else [selectable_models[model_choice - 1]]
+    
+    # 运行测试并收集结果
+    model_results = []
+    for model in selected_models:
+        result = runner.run_model_tests(model, selected_test_cases)
+        model_results.append(result)
+    
+    # 输出比较结果
+    print("\n📊 模型测试结果比较:")
+    print("=" * 60)
+    print(f"{'模型名称':<30} {'总数':>6} {'通过':>6} {'失败':>6} {'通过率':>8}")
+    print("-" * 60)
+    for result in model_results:
+        print(f"{result['model']:<30} {result['total']:>6} {result['passed']:>6} "
+              f"{result['failed']:>6} {result['pass_rate']:>7.2f}%")
+    print("=" * 60)
 
 if __name__ == "__main__":
     main()
