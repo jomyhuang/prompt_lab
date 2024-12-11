@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
+from langchain.schema import SystemMessage, HumanMessage, AIMessage
 from dotenv import load_dotenv
 import ssl
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -54,26 +55,24 @@ class PromptTestRunner:
         temperature = float(os.getenv("TEMPERATURE", "0.7"))
         
         # 对于 Claude 模型，使用特定的配置
-        if "claude" in model_name.lower():
-            model_kwargs = {
-                "model": model_name,
-                "max_tokens": 4096,
-            }
-            headers = {
-                "Content-Type": "application/json",
-                "anthropic-version": "2023-06-01"
-            }
-        else:
-            model_kwargs = {}
-            headers = None
+#        if "claude" in model_name.lower():
+#            headers = {
+#                "Content-Type": "application/json",
+#            }
+#            model_kwargs = {
+#                "max_tokens": 4096
+#            }
+#        else:
+        headers = {}
+        model_kwargs = {}
 
         self.chat = ChatOpenAI(
-            model_name=model_name,
+            model=model_name,
             temperature=temperature,
             openai_api_base=os.getenv("OPENAI_API_BASE"),
             openai_api_key=os.getenv("OPENAI_API_KEY"),
             default_headers=headers,
-            model_kwargs=model_kwargs
+            **model_kwargs
         )
         
         # 从文件加载系统提示词
@@ -204,20 +203,17 @@ class PromptTestRunner:
             input_json = json.dumps(test_case, ensure_ascii=False, indent=2)
             
             # 构建消息格式
-            messages = [
-                {
-                    "role": "system",
-                    "content": self.system_prompt.format(
-                        input=test_case.get("input", ""),
-                        context=json.dumps(test_case.get("context", {}), ensure_ascii=False)
-                    )
-                }
-            ]
+            system_content = self.system_prompt.format(
+                input=test_case.get("input", ""),
+                context=json.dumps(test_case.get("context", {}), ensure_ascii=False)
+            )
             
             # 调用API
             try:
-                result = self.chat.invoke(messages)
-                
+                result = self.chat.invoke(
+                    [{"role": "system", "content": system_content}]
+                )
+
                 # 解析输出
                 try:
                     # 清理响应内容，删除 JSON 前后的所有内容
@@ -327,25 +323,22 @@ class PromptTestRunner:
         
         # 重新初始化 chat 实例
         if "claude" in model_name.lower():
-            model_kwargs = {
-                "model": model_name,
-                "max_tokens": 4096,
-            }
             headers = {
                 "Content-Type": "application/json",
                 "anthropic-version": "2023-06-01"
             }
+            max_tokens = 4096
         else:
-            model_kwargs = {}
             headers = None
+            max_tokens = None
 
         self.chat = ChatOpenAI(
-            model_name=model_name,
+            model=model_name,
             temperature=float(os.getenv("TEMPERATURE", "0.7")),
             openai_api_base=os.getenv("OPENAI_API_BASE"),
             openai_api_key=os.getenv("OPENAI_API_KEY"),
             default_headers=headers,
-            model_kwargs=model_kwargs
+            max_tokens=max_tokens
         )
         
         results = []
