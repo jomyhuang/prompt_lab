@@ -70,9 +70,9 @@ class PromptTestRunner:
             model=model_name,
             temperature=temperature,
             openai_api_base=os.getenv("OPENAI_API_BASE"),
-            openai_api_key=os.getenv("OPENAI_API_KEY"),
-            default_headers=headers,
-            **model_kwargs
+            openai_api_key=os.getenv("OPENAI_API_KEY")
+#            default_headers=headers,
+#            **model_kwargs
         )
         
         # 从文件加载系统提示词
@@ -100,9 +100,13 @@ class PromptTestRunner:
 6. 输出JSON的键值统一使用小写字母
 """
 
+#        self.prompt = ChatPromptTemplate.from_messages([
+#            ("system", self.system_prompt),
+#        ])
         self.prompt = ChatPromptTemplate.from_messages([
-            ("system", self.system_prompt),
+            SystemMessage(content=self.system_prompt),
         ])
+
         print(f"使用模型: {model_name}")
         print("提示词加载完成，长度：", len(self.system_prompt))
 
@@ -210,9 +214,13 @@ class PromptTestRunner:
             
             # 调用API
             try:
-                result = self.chat.invoke(
-                    [{"role": "system", "content": system_content}]
-                )
+#                result = self.chat.invoke(
+#                    [{"role": "system", "content": system_content}]
+#                )
+                messages = []
+                messages.append(SystemMessage(content=system_content))
+                result = self.chat.invoke(messages)
+
 
                 # 解析输出
                 try:
