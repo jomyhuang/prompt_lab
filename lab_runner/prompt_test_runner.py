@@ -384,6 +384,9 @@ def main():
         "Doubao-pro-128k",
         "gpt-3.5-turbo",
         "claude-3-sonnet-20240229",
+        "claude-3-5-sonnet-20240620",
+        "claude-3-5-sonnet-20241022",
+        "c-3-5-sonnet-20241022",
         "gpt-4-turbo",
         "qwen-max",
         "glm-4"
