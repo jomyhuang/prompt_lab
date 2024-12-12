@@ -51,12 +51,14 @@
    - [机器人194号] *谨慎地计算中* "指挥官，我们需要更多资源才能继续建设。"
 
 # OutputFormat: 
+输出必须是JSON格式，包含以下字段：
 ```json
 {
     "updated_context": {
         "gamestate": {
             "status": <String>,
-            "round": <Number>
+            "round": <Number>,
+            "lastEvent": <String>
         },
         "resources": {
             "wood": <Number>,

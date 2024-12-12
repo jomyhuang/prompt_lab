@@ -32,7 +32,7 @@ class EnhancedChatBot:
         try:
             self.chat = ChatOpenAI(
                 model=self.model,
-                openai_api_key=self.api_key,
+                api_key=self.api_key,
                 base_url=self.api_base,
                 temperature=0.7,
                 streaming=True
@@ -64,6 +64,7 @@ class EnhancedChatBot:
                 messages.append(SystemMessage(content=system_message))
             messages.append(HumanMessage(content=message))
             
+            print(messages)
             response = self.chat.invoke(messages)
             return response.content
         except Exception as e:

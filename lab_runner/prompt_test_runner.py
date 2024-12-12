@@ -7,8 +7,10 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain.schema import SystemMessage, HumanMessage, AIMessage
 from dotenv import load_dotenv
-import ssl
-ssl._create_default_https_context = ssl._create_unverified_context
+import logging
+
+#import ssl
+#ssl._create_default_https_context = ssl._create_unverified_context
 
 @dataclass
 class TestCase:
@@ -54,27 +56,15 @@ class PromptTestRunner:
         # 根据不同模型配置合适的参数
         temperature = float(os.getenv("TEMPERATURE", "0.7"))
         
-        # 对于 Claude 模型，使用特定的配置
-#        if "claude" in model_name.lower():
-#            headers = {
-#                "Content-Type": "application/json",
-#            }
-#            model_kwargs = {
-#                "max_tokens": 4096
-#            }
-#        else:
-        headers = {}
-        model_kwargs = {}
-
         self.chat = ChatOpenAI(
             model=model_name,
             temperature=temperature,
-            openai_api_base=os.getenv("OPENAI_API_BASE"),
-            openai_api_key=os.getenv("OPENAI_API_KEY")
-#            default_headers=headers,
-#            **model_kwargs
+            base_url=os.getenv("OPENAI_API_BASE"),
+            api_key=os.getenv("OPENAI_API_KEY"),
+            streaming=True
         )
         
+
         # 从文件加载系统提示词
         prompt_file = Path(__file__).parent.parent / self.prompt_dir / self.prompt_filename
         print(f"Loading prompt from: {prompt_file}")
@@ -85,11 +75,11 @@ class PromptTestRunner:
         content = content.replace("{", "{{").replace("}", "}}")  # 转义所有的花括号
         content = content.replace("{{{{", "{").replace("}}}}", "}")  # 恢复原有的双花括号
 
-        # 系统提示词模板
-        self.system_prompt = content + f"""
+#当前输入: {{input}}
+#当前上下文: {{context}}
 
-当前输入: {{input}}
-当前上下文: {{context}}
+        # 系统提示词模板(注入模板标记)
+        self.system_prompt = content + f"""
 
 注意：
 1. 你必须直接返回JSON格式数据，不要在JSON前后添加任何其他文本、对话或说明
@@ -100,12 +90,12 @@ class PromptTestRunner:
 6. 输出JSON的键值统一使用小写字母
 """
 
-#        self.prompt = ChatPromptTemplate.from_messages([
-#            ("system", self.system_prompt),
-#        ])
         self.prompt = ChatPromptTemplate.from_messages([
-            SystemMessage(content=self.system_prompt),
+            ("system", self.system_prompt)
         ])
+#        self.prompt = ChatPromptTemplate.from_messages([
+#            SystemMessage(content=self.system_prompt)
+#        ])
 
         print(f"使用模型: {model_name}")
         print("提示词加载完成，长度：", len(self.system_prompt))
@@ -214,11 +204,18 @@ class PromptTestRunner:
             
             # 调用API
             try:
-#                result = self.chat.invoke(
-#                    [{"role": "system", "content": system_content}]
-#                )
+                #result = self.chat.invoke(
+                #    [{"role": "system", "content": system_content}]
+                #)
+                # 使用将context和input 直接变成 HumanMessage
                 messages = []
                 messages.append(SystemMessage(content=system_content))
+                messages.append(HumanMessage(content=input_json))
+
+                #messages.append(SystemMessage(content="you are a helpful assistant."))
+                #messages.append(HumanMessage(content="my name is bob."))
+                #print(messages)
+
                 result = self.chat.invoke(messages)
 
 
