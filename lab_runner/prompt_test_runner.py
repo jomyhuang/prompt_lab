@@ -8,9 +8,14 @@ from langchain_openai import ChatOpenAI
 from langchain.schema import SystemMessage, HumanMessage, AIMessage
 from dotenv import load_dotenv
 import logging
+import time  # 添加在文件开头的import部分
 
 #import ssl
 #ssl._create_default_https_context = ssl._create_unverified_context
+# 加载环境变量并设置日志
+load_dotenv()
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 @dataclass
 class TestCase:
@@ -24,11 +29,12 @@ class TestResult:
     actual_output: Dict[str, Any]
     passed: bool
     error_message: str = ""
+    execution_time: float = 0.0  # 添加执行时间字段
 
 class PromptTestRunner:
     def __init__(self):
         load_dotenv()
-        model_name = os.getenv("OPENAI_MODEL_NAME", "gpt-3.5-turbo")
+#        model_name = os.getenv("OPENAI_MODEL_NAME", "gpt-3.5-turbo")
         
         # 定义提示词目录
         self.prompt_dir = "prompt_engineering/bot194/01"  # 修改为正确的目录路径
@@ -54,15 +60,15 @@ class PromptTestRunner:
         self.select_prompt_config()
         
         # 根据不同模型配置合适的参数
-        temperature = float(os.getenv("TEMPERATURE", "0.7"))
+#        temperature = float(os.getenv("TEMPERATURE", "0.7"))
         
-        self.chat = ChatOpenAI(
-            model=model_name,
-            temperature=temperature,
-            base_url=os.getenv("OPENAI_API_BASE"),
-            api_key=os.getenv("OPENAI_API_KEY"),
-            streaming=True
-        )
+#        self.chat = ChatOpenAI(
+#            model=model_name,
+#            temperature=temperature,
+#            base_url=os.getenv("OPENAI_API_BASE"),
+#            api_key=os.getenv("OPENAI_API_KEY"),
+#            streaming=True
+#        )
         
 
         # 从文件加载系统提示词
@@ -97,7 +103,7 @@ class PromptTestRunner:
 #            SystemMessage(content=self.system_prompt)
 #        ])
 
-        print(f"使用模型: {model_name}")
+#        print(f"使用模型: {model_name}")
         print("提示词加载完成，长度：", len(self.system_prompt))
 
     def select_prompt_config(self):
@@ -190,8 +196,9 @@ class PromptTestRunner:
             
         return test_cases
 
-    def run_test(self, test_case: Dict[str, Any], expected_output: Dict[str, Any]) -> bool:
-        """运行单个测试用例"""
+    def run_test(self, test_case: Dict[str, Any], expected_output: Dict[str, Any]) -> tuple[bool, float]:
+        """运行单个测试用例并返回结果和执行时间"""
+        start_time = time.time()  # 记录开始时间
         try:
             # 准备输入
             input_json = json.dumps(test_case, ensure_ascii=False, indent=2)
@@ -233,10 +240,10 @@ class PromptTestRunner:
                     self._validate_output_format(output)
                     # 比较输出
                     if self._compare_outputs(output, expected_output):
-                        print(f"✅ 测试通过")
-                        return True
+                        print(f"✅ 测试通过 (耗时: {time.time() - start_time:.2f}秒)")
+                        return True, time.time() - start_time
                     else:
-                        print("\n❌ 测试失败")
+                        print(f"\n❌ 测试失败 (耗时: {time.time() - start_time:.2f}秒)")
                         print("\n测试用例:")
                         print("输入:")
                         print(json.dumps(test_case, ensure_ascii=False, indent=2))
@@ -244,7 +251,7 @@ class PromptTestRunner:
                         print(json.dumps(expected_output, ensure_ascii=False, indent=2))
                         print("\n实际输出:")
                         print(json.dumps(output, ensure_ascii=False, indent=2))
-                        return False
+                        return False, time.time() - start_time
                 except json.JSONDecodeError:
                     print(f"\n❌ AI响应不是有效的JSON格式:")
                     print(result.content)
@@ -253,20 +260,21 @@ class PromptTestRunner:
                     print(json.dumps(test_case, ensure_ascii=False, indent=2))
                     print("\n期望输出:")
                     print(json.dumps(expected_output, ensure_ascii=False, indent=2))
-                    return False
+                    return False, time.time() - start_time
                     
             except Exception as e:
                 print(f"\n❌ API调用错误: {str(e)}")
-                return False
+                logger.error(f"API调用错误: {str(e)}")
+                return False, time.time() - start_time
                 
         except Exception as e:
-            print(f"\n❌ 测试执行出错: {str(e)}")
+            print(f"\n❌ 测试执行出错: {str(e)} (耗时: {time.time() - start_time:.2f}秒)")
             print("\n测试用例:")
             print("输入:")
             print(json.dumps(test_case, ensure_ascii=False, indent=2))
             print("\n期望输出:")
             print(json.dumps(expected_output, ensure_ascii=False, indent=2))
-            return False
+            return False, time.time() - start_time
 
     def _compare_outputs(self, actual: Dict[str, Any], expected: Dict[str, Any]) -> bool:
         """比较实际输出和预期输出，只检查测试用例中存在的键值"""
@@ -336,38 +344,49 @@ class PromptTestRunner:
         else:
             headers = None
             max_tokens = None
-
-        self.chat = ChatOpenAI(
-            model=model_name,
-            temperature=float(os.getenv("TEMPERATURE", "0.7")),
-            openai_api_base=os.getenv("OPENAI_API_BASE"),
-            openai_api_key=os.getenv("OPENAI_API_KEY"),
-            default_headers=headers,
-            max_tokens=max_tokens
-        )
+        
+        try:
+            self.chat = ChatOpenAI(
+                model=model_name,
+                temperature=float(os.getenv("TEMPERATURE", "0.7")),
+                base_url=os.getenv("OPENAI_API_BASE"),
+                api_key=os.getenv("OPENAI_API_KEY"),
+                streaming=True
+            )
+            #使用claude模型，必须强制开启 streaming=True    
+            #    default_headers=headers,
+            #    max_tokens=max_tokens
+            #)
+        except Exception as e:
+            logger.error(f"初始化模型失败: {str(e)}")
+            raise
         
         results = []
+        total_time = 0
+        test_times = []
+        
         for test_case in test_cases:
             print(f"\n🔄 运行测试用例: {test_case.name}")
-            result = self.run_test(test_case.input_data, test_case.expected_output)
+            result, execution_time = self.run_test(test_case.input_data, test_case.expected_output)
             results.append(result)
+            test_times.append(execution_time)
+            total_time += execution_time
             
-            if result:
-                print("✅ 测试通过")
-            else:
-                print("❌ 测试失败")
-        
         # 计算统计数据
         total = len(results)
         passed = sum(1 for r in results if r)
         pass_rate = (passed/total)*100 if total > 0 else 0
+        avg_time = total_time / total if total > 0 else 0
         
         return {
             "model": model_name,
             "total": total,
             "passed": passed,
             "failed": total - passed,
-            "pass_rate": pass_rate
+            "pass_rate": pass_rate,
+            "total_time": total_time,
+            "avg_time": avg_time,
+            "test_times": test_times  # 保存每个测试用例的执行时间
         }
 
 def main():
@@ -401,7 +420,9 @@ def main():
     all_test_models = [
         "moonshot-v1-32k",
         "Doubao-pro-128k",
-        "gpt-4-turbo"
+        "claude-3-5-sonnet-20241022",
+        "gpt-4-turbo",
+        "glm-4"
     ]
     
     # 显示模型列表
@@ -444,7 +465,7 @@ def main():
     # 准备要测试的模型
     selected_models = all_test_models if model_choice == 0 else [selectable_models[model_choice - 1]]
     
-    # 运行测试并收集结果
+    # 运行测试并��集结果
     model_results = []
     for model in selected_models:
         result = runner.run_model_tests(model, selected_test_cases)
@@ -452,13 +473,21 @@ def main():
     
     # 输出比较结果
     print("\n📊 模型测试结果比较:")
-    print("=" * 60)
-    print(f"{'模型名称':<30} {'总数':>6} {'通过':>6} {'失败':>6} {'通过率':>8}")
-    print("-" * 60)
+    print("=" * 80)
+    print(f"{'模型名称':<25} {'总数':>6} {'通过':>6} {'失败':>6} {'通过率':>8} {'总耗时':>10} {'平均耗时':>10}")
+    print("-" * 80)
     for result in model_results:
-        print(f"{result['model']:<30} {result['total']:>6} {result['passed']:>6} "
-              f"{result['failed']:>6} {result['pass_rate']:>7.2f}%")
-    print("=" * 60)
+        print(f"{result['model']:<25} {result['total']:>6} {result['passed']:>6} "
+              f"{result['failed']:>6} {result['pass_rate']:>7.2f}% "
+              f"{result['total_time']:>9.2f}s {result['avg_time']:>9.2f}s")
+    print("=" * 80)
+    
+    # 如果只运行了一个测试用例，显示详细的时间信息
+    if len(selected_test_cases) > 1:
+        print("\n📊 各测试用例执行时间:")
+        for i, test_case in enumerate(selected_test_cases):
+            for result in model_results:
+                print(f"{result['model']} - {test_case.name}: {result['test_times'][i]:.2f}秒")
 
 if __name__ == "__main__":
     main()
