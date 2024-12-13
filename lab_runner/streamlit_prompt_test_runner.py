@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
+from langchain_community.llms import Ollama
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.schema import SystemMessage, HumanMessage, AIMessage
 from dotenv import load_dotenv
 import logging
@@ -13,6 +16,7 @@ import time
 import datetime
 import csv
 import pandas as pd
+from typing import Optional, Tuple
 
 # 加载环境变量并设置日志
 load_dotenv()
@@ -32,6 +36,106 @@ class TestResult:
     passed: bool
     error_message: str = ""
     execution_time: float = 0.0
+
+@dataclass
+class ModelVendorConfig:
+    name: str                    # 模型商名称
+    models: List[str]           # 该商家提供的模型列表
+    baseline_models: List[str]  # 该商家的基线模型列表
+    api_key_env: str           # 环境变量中API KEY的名称
+    base_url: str              # API基础URL
+    model_class: Optional[str] = None  # 模型基类名称，可选
+
+# 模型商配置
+MODEL_VENDORS = {
+    "SMALLAI": ModelVendorConfig(
+        name="SmallAI",
+        models=["moonshot-v1-32k",
+        "Doubao-pro-128k",
+        "gemini-2.0-flash-exp",
+        "gpt-3.5-turbo",
+        "claude-3-sonnet-20240229",
+        "claude-3-5-sonnet-20240620",
+        "claude-3-5-sonnet-20241022",
+        "c-3-5-sonnet-20241022",
+        "gpt-4-turbo",
+        "qwen-max",
+        "glm-4"
+        ],  
+        baseline_models=["moonshot-v1-32k",
+        "Doubao-pro-128k",
+        "claude-3-5-sonnet-20241022"
+#        "gpt-4-turbo",
+#        "glm-4"],
+        ],
+        api_key_env="SMALLAI_API_KEY",
+        base_url="https://ai98.vip/v1",
+        model_class="ChatOpenAI"  # 使用 OpenAI 基类
+    ),
+    "GoogleAPI": ModelVendorConfig(
+        name="GoogleAPI",
+        models=["gemini-2.0-flash","gemini-1.5-flash","gemini-1.5-pro"],
+        baseline_models=["gemini-2.0-flash"],
+        api_key_env="GOOGLE_API_KEY",
+        base_url=None,
+        model_class="ChatGoogleGenerativeAI"
+    ),
+    "Ollama": ModelVendorConfig(
+        name="Ollama",
+        models=["llama2", "mistral", "mixtral", "codellama", "qwen", "yi"],
+        baseline_models=["mixtral"],
+        api_key_env=None,  # Ollama 不需要 API key
+        base_url="http://localhost:11434",  # 默认的 Ollama 地址
+        model_class="Ollama"
+    ),
+    "LLMStudio": ModelVendorConfig(
+        name="LLMStudio",
+        models=["llmstudio"],  # LLMStudio 作为本地服务
+        baseline_models=[],
+        api_key_env=None,
+        base_url="http://localhost:8000",  # 默认的 LLMStudio 地址
+        model_class="ChatOpenAI"  # LLMStudio 兼容 OpenAI 接口
+    ),
+    "Anthropic": ModelVendorConfig(
+        name="Anthropic",
+        models=["claude-3-opus", "claude-3-sonnet", "claude-2.1", "claude-2", "claude-instant"],
+        baseline_models=["claude-3-opus", "claude-2.1"],
+        api_key_env="ANTHROPIC_API_KEY",
+        base_url="https://api.anthropic.com/v1",
+        model_class="ChatAnthropic"
+    ),
+    "Zhipu": ModelVendorConfig(
+        name="Zhipu",
+        models=["chatglm_turbo", "chatglm_pro", "chatglm_std", "chatglm_lite", "glm-4", "glm-4v"],
+        baseline_models=["glm-4"],
+        api_key_env="ZHIPU_API_KEY",
+        base_url="https://open.bigmodel.cn/api/paas/v3/model-api",
+        model_class="ChatOpenAI"  # 使用 OpenAI 基类
+    ),
+    "Baidu": ModelVendorConfig(
+        name="Baidu",
+        models=["ERNIE-Bot-4", "ERNIE-Bot", "ERNIE-Bot-turbo", "ERNIE-Bot-8k"],
+        baseline_models=["ERNIE-Bot-4"],
+        api_key_env="BAIDU_API_KEY",
+        base_url="https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat",
+        model_class="ChatOpenAI"  # 使用 OpenAI 基类
+    )
+}
+
+def get_model_configs():
+    """获取模型配置并验证API密钥"""
+    available_vendors = {}
+    
+    for vendor_name, config in MODEL_VENDORS.items():
+        # 如果不需要API密钥（本地模型）或者有API密钥
+        if config.api_key_env is None:
+            available_vendors[vendor_name] = config
+        else:
+            api_key = os.getenv(config.api_key_env)
+            if api_key:
+                available_vendors[vendor_name] = config
+    
+    return available_vendors
 
 class PromptTestRunner:
     def __init__(self):
@@ -209,6 +313,39 @@ class PromptTestRunner:
         is_match, error_details = compare_dicts(actual, expected)
         return is_match, error_details
 
+    def get_chat_model(self, model_name: str, vendor_config: ModelVendorConfig):
+        """根据模型商配置获取对应的聊天模型实例"""
+        temperature = float(os.getenv("TEMPERATURE", "0.7"))
+
+        if vendor_config.model_class == "ChatAnthropic":
+            return ChatAnthropic(
+                model=model_name,
+                anthropic_api_key=os.getenv(vendor_config.api_key_env),
+                temperature=temperature,
+                streaming=True
+            )
+        elif vendor_config.model_class == "Ollama":
+            return Ollama(
+                model=model_name,
+                base_url=vendor_config.base_url,
+                temperature=temperature
+            )
+        elif vendor_config.model_class == "ChatGoogleGenerativeAI":
+            return ChatGoogleGenerativeAI(
+                model=model_name,
+                google_api_key=os.getenv(vendor_config.api_key_env),
+                temperature=temperature
+                #,convert_system_message_to_human=True
+            )
+        else:  # 默认使用 ChatOpenAI（包括 LLMStudio，因为它兼容 OpenAI 接口）
+            return ChatOpenAI(
+                model=model_name,
+                temperature=temperature,
+                base_url=vendor_config.base_url,
+                api_key=os.getenv(vendor_config.api_key_env),
+                streaming=True
+            )
+
     def run_test(self, test_case: Dict[str, Any], expected_output: Dict[str, Any], model_name: str) -> tuple[bool, Dict[str, Any], float, str]:
         """运行单个测试用例并返回结果、实际输出、执行时间和错误信息"""
         start_time = time.time()
@@ -224,13 +361,11 @@ class PromptTestRunner:
             )
             
             try:
-                chat = ChatOpenAI(
-                    model=model_name,
-                    temperature=float(os.getenv("TEMPERATURE", "0.7")),
-                    base_url=os.getenv("OPENAI_API_BASE"),
-                    api_key=os.getenv("OPENAI_API_KEY"),
-                    streaming=True
-                )
+                # 获取当前选中的模型商配置
+                vendor_config = st.session_state.selected_vendor
+                
+                # 根据模型商配置获取聊天模型实例
+                chat = self.get_chat_model(model_name, vendor_config)
                 
                 messages = [
                     SystemMessage(content=system_content),
@@ -334,63 +469,63 @@ def main():
         st.session_state.errors = []
         st.session_state.results = {}
     
+    # 获取可用的模型商配置
+    available_vendors = get_model_configs()
+    
+    if not available_vendors:
+        st.error("未找到任何可用的模型配置，请检查环境变量中的API密钥设置")
+        return
+        
     # 可选模型列表
-    models = [
-        "moonshot-v1-32k",
-        "Doubao-pro-128k",
-        "gpt-3.5-turbo",
-        "claude-3-sonnet-20240229",
-        "claude-3-5-sonnet-20240620",
-        "claude-3-5-sonnet-20241022",
-        "c-3-5-sonnet-20241022",
-        "gpt-4-turbo",
-        "qwen-max",
-        "glm-4"
-    ]
-
+    models = []
+    for vendor in available_vendors.values():
+        models.extend(vendor.models)
+    
     # baseline 模型列表
-    baseline_models = [
-        "moonshot-v1-32k",
-#        "Doubao-pro-128k",
-        "claude-3-5-sonnet-20241022"
-#        "gpt-4-turbo",
-#        "glm-4"
-    ]
+    baseline_models = []
+    for vendor in available_vendors.values():
+        baseline_models.extend(vendor.baseline_models)
     
     # 侧边栏配置
     with st.sidebar:
         st.header("配置")
         
-        # 选择提示词系统
-        prompt_system = st.selectbox(
-            "选择提示词系统",
-            options=list(st.session_state.runner.prompt_configs.keys())
+        # 选择模型商
+        vendor_names = list(available_vendors.keys())
+        selected_vendor_name = st.selectbox(
+            "选择模型商",
+            options=vendor_names,
+            key="vendor_selector"
         )
         
-        # 选择模型模式
-        model_mode = st.radio(
-            "选择模型模式",
-            options=["单个模型", "Baseline模型组"],
-            index=0
+        # 获取选中的模型商配置
+        selected_vendor = available_vendors[selected_vendor_name]
+        st.session_state.selected_vendor = selected_vendor
+        
+        # 当模型商改变时，重置选中的模型列表
+        if ('previous_vendor' not in st.session_state or 
+            st.session_state.previous_vendor != selected_vendor_name):
+            st.session_state.selected_models = [selected_vendor.models[0]]
+            st.session_state.previous_vendor = selected_vendor_name
+        
+        # 选择基线模型按钮
+        if st.button("选择基线模型"):
+            st.session_state.selected_models = selected_vendor.baseline_models
+        
+        # 多选模型
+        selected_models = st.multiselect(
+            "选择要测试的模型",
+            options=selected_vendor.models,
+            default=st.session_state.selected_models
         )
-
-        if model_mode == "单个模型":
-            # 选择单个模型
-            selected_model = st.selectbox(
-                "选择测试模型",
-                options=models
-            )
-            selected_models = [selected_model]
-        else:
-            # 使用baseline模型组
-            selected_models = baseline_models
-            st.info("将使用以下baseline模型进行测试：\n" + "\n".join([f"- {model}" for model in baseline_models]))
+        # 更新选中的模型
+        st.session_state.selected_models = selected_models
     
     # 主界面
     if st.button("加载提示词和测试用例", key="load_button"):
         with st.spinner("正在加载..."):
             # 加载提示词
-            prompt_length = st.session_state.runner.load_prompt(prompt_system)
+            prompt_length = st.session_state.runner.load_prompt("建造系统")
             st.success(f"提示词加载完成，长度：{prompt_length}")
             
             # 加载测试用例
@@ -428,16 +563,22 @@ def main():
         
         with col2:
             st.subheader("运行测试")
+            
+            # 显示已选择的模型列表（单行紧凑显示）
+            if st.session_state.selected_models:
+                model_list = ", ".join([f"`{model}`" for model in st.session_state.selected_models])
+                st.markdown(f"已选择的模型: {model_list}")
+            
             if st.button("运行测试"):
                 st.session_state.results = {}
                 
                 # 对每个选中的模型运行测试
                 test_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                for model in selected_models:
+                for model in st.session_state.selected_models:
                     st.subheader(f"模型: {model}")
                     model_results = {}
                     
-                    for case_name in selected_cases:
+                    for case_name in st.session_state.selected_test_cases:
                         test_case = next(case for case in st.session_state.test_cases if case.name == case_name)
                         with st.spinner(f"正在运行测试用例: {case_name}"):
                             passed, actual_output, execution_time, error = st.session_state.runner.run_test(
@@ -459,7 +600,7 @@ def main():
                             
                             # 保存测试结果
                             st.session_state.runner.save_test_results(
-                                prompt_system,
+                                "建造系统",
                                 model,
                                 case_name,
                                 result,
