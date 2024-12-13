@@ -37,7 +37,7 @@ class PromptTestRunner:
 #        model_name = os.getenv("OPENAI_MODEL_NAME", "gpt-3.5-turbo")
         
         # 定义提示词目录
-        self.prompt_dir = "prompt_engineering/bot194/01"  # 修改为正确的目录路径
+        self.prompt_dir = "prompt_engineering/bot194/01"  # 改为正确的目录路径
         
         # 定义提示词配置映射
         self.prompt_configs = {
@@ -277,7 +277,7 @@ class PromptTestRunner:
             return False, time.time() - start_time
 
     def _compare_outputs(self, actual: Dict[str, Any], expected: Dict[str, Any]) -> bool:
-        """比较实际输出和预期输出，只检查测试用例中存在的键值"""
+        """比较实际输出和预期输出只检查测试用例中存在的键值"""
         def compare_dicts(actual_dict: Dict[str, Any], expected_dict: Dict[str, Any], path: str = "") -> bool:
             for key, expected_value in expected_dict.items():
                 if key not in actual_dict:
@@ -465,7 +465,7 @@ def main():
     # 准备要测试的模型
     selected_models = all_test_models if model_choice == 0 else [selectable_models[model_choice - 1]]
     
-    # 运行测试并��集结果
+    # 运行测试并集结果
     model_results = []
     for model in selected_models:
         result = runner.run_model_tests(model, selected_test_cases)
@@ -473,14 +473,31 @@ def main():
     
     # 输出比较结果
     print("\n📊 模型测试结果比较:")
-    print("=" * 80)
-    print(f"{'模型名称':<25} {'总数':>6} {'通过':>6} {'失败':>6} {'通过率':>8} {'总耗时':>10} {'平均耗时':>10}")
-    print("-" * 80)
+    
+    # 定义表格格式
+    FORMAT = "{:<35} {:>8} {:>8} {:>8} {:>10} {:>12} {:>12}"
+    
+    # 打印表头和分隔线
+    header_line = "=" * 95
+    print(header_line)
+    print(FORMAT.format(
+        "模型名称", "总数", "通过", "失败", "通过率", "总耗时", "平均耗时"
+    ))
+    print("-" * 95)
+    
+    # 打印数据行
     for result in model_results:
-        print(f"{result['model']:<25} {result['total']:>6} {result['passed']:>6} "
-              f"{result['failed']:>6} {result['pass_rate']:>7.2f}% "
-              f"{result['total_time']:>9.2f}s {result['avg_time']:>9.2f}s")
-    print("=" * 80)
+        print(FORMAT.format(
+            result['model'],
+            str(result['total']),
+            str(result['passed']),
+            str(result['failed']),
+            f"{result['pass_rate']:.1f}%",
+            f"{result['total_time']:.2f}s",
+            f"{result['avg_time']:.2f}s"
+        ))
+    
+    print(header_line)
     
     # 如果只运行了一个测试用例，显示详细的时间信息
     if len(selected_test_cases) > 1:
