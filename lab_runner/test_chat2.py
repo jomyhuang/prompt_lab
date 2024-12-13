@@ -29,10 +29,14 @@ class EnhancedChatBot:
 
     def _init_model(self):
         """初始化模型"""
+        print(self.model)
+        print(self.api_key)
+        print(self.api_base)
+        
         try:
             self.chat = ChatOpenAI(
                 model=self.model,
-                api_key=self.api_key,
+                #api_key=self.api_key,
                 base_url=self.api_base,
                 temperature=0.7,
                 streaming=True

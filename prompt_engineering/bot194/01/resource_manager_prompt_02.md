@@ -79,7 +79,7 @@
         "gamestate": {
             "status": "进行中",
             "round": 1,
-            "lastEvent": "建造开拓站"
+            "lastevent": "建造开拓站"
         },
         "resources": {
             "wood": <Number>,
@@ -117,7 +117,7 @@
         "gamestate": {
             "status": "进行中",
             "round": 1,
-            "lastEvent": "建造开拓站"
+            "lastevent": "建造开拓站"
         },
         "resources": {
             "wood": 70,
@@ -154,7 +154,7 @@
         "gamestate": {
             "status": "进行中",
             "round": 1,
-            "lastEvent": "建造开拓站"
+            "lastevent": "建造开拓站"
         },
         "resources": {
             "wood": 50,
@@ -191,7 +191,7 @@
         "gamestate": {
             "status": "进行中",
             "round": 1,
-            "lastEvent": "建造开拓站"
+            "lastevent": "建造开拓站"
         },
         "resources": {
             "wood": 50,
@@ -228,7 +228,7 @@
         "gamestate": {
             "status": "进行中",
             "round": 1,
-            "lastEvent": "建造开拓站"
+            "lastevent": "建造开拓站"
         },
         "resources": {
             "wood": 50,
@@ -265,7 +265,7 @@
         "gamestate": {
             "status": "进行中",
             "round": 1,
-            "lastEvent": "建造开拓站"
+            "lastevent": "建造开拓站"
         },
         "resources": {
             "wood": 50,
@@ -302,7 +302,7 @@
         "gamestate": {
             "status": "进行中",
             "round": 1,
-            "lastEvent": "建造开拓站"
+            "lastevent": "建造开拓站"
         },
         "resources": {
             "wood": 50,

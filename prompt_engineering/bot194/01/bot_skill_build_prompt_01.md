@@ -8,7 +8,7 @@
     "gamestate": {
         "status": "开始",
         "round": 0,
-        "lastEvent": null
+        "lastevent": null
     },
     "resources": {
         "wood": 50,
@@ -227,7 +227,7 @@ build [建筑名称]
     "gamestate": {
         "status": "运行中",
         "round": 1,
-        "lastEvent": null
+        "lastevent": null
     },
     "resources": {
         "wood": 50,

@@ -8,7 +8,7 @@
     "gamestate": {
         "status": <Enum> ["测试数据","未初始化", "未开始", "进行中", "暂停", "结束"],
         "round": 0,
-        "lastEvent": null
+        "lastevent": null
     },
     "resources": {
         "wood": 50,

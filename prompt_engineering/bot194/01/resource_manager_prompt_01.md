@@ -14,7 +14,7 @@
     "gamestate": {
         "status": "未开始",
         "round": 0,
-        "lastEvent": null
+        "lastevent": null
     },
     "resources": {
         "wood": 50,

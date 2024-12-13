@@ -7,7 +7,8 @@ from pathlib import Path
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
-from langchain_community.llms import Ollama
+from langchain_ollama import ChatOllama
+#from langchain_community.llms import Ollama
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.schema import SystemMessage, HumanMessage, AIMessage
 from dotenv import load_dotenv
@@ -82,19 +83,19 @@ MODEL_VENDORS = {
     ),
     "Ollama": ModelVendorConfig(
         name="Ollama",
-        models=["llama2", "mistral", "mixtral", "codellama", "qwen", "yi"],
-        baseline_models=["mixtral"],
+        models=["qwen2.5-coder:7b", "llama2", "mistral", "mixtral", "codellama", "qwen", "yi"],
+        baseline_models=["qwen2.5-coder:7b"],
         api_key_env=None,  # Ollama 不需要 API key
         base_url="http://localhost:11434",  # 默认的 Ollama 地址
         model_class="Ollama"
     ),
     "LLMStudio": ModelVendorConfig(
         name="LLMStudio",
-        models=["llmstudio"],  # LLMStudio 作为本地服务
-        baseline_models=[],
+        models=["qwen2.5-coder-32b-instruct"],  # LLMStudio 作为本地服务
+        baseline_models=["qwen2.5-coder-32b-instruct"],
         api_key_env=None,
-        base_url="http://localhost:8000",  # 默认的 LLMStudio 地址
-        model_class="ChatOpenAI"  # LLMStudio 兼容 OpenAI 接口
+        base_url="http://localhost:1234/v1",  # 默认的 LLMStudio 地址
+        model_class="LLMStudio"  # LLMStudio 兼容 OpenAI 接口
     ),
     "Anthropic": ModelVendorConfig(
         name="Anthropic",
@@ -325,10 +326,11 @@ class PromptTestRunner:
                 streaming=True
             )
         elif vendor_config.model_class == "Ollama":
-            return Ollama(
+            return ChatOllama(
                 model=model_name,
                 base_url=vendor_config.base_url,
-                temperature=temperature
+                temperature=temperature,
+                streaming=True
             )
         elif vendor_config.model_class == "ChatGoogleGenerativeAI":
             return ChatGoogleGenerativeAI(
@@ -336,6 +338,14 @@ class PromptTestRunner:
                 google_api_key=os.getenv(vendor_config.api_key_env),
                 temperature=temperature
                 #,convert_system_message_to_human=True
+            )
+        elif vendor_config.model_class == "LLMStudio":  # 默认使用 ChatOpenAI（包括 LLMStudio，因为它兼容 OpenAI 接口）
+            return ChatOpenAI(
+                model=model_name,
+                temperature=temperature,
+                base_url=vendor_config.base_url
+                #api_key=os.getenv(vendor_config.api_key_env),
+                #streaming=True
             )
         else:  # 默认使用 ChatOpenAI（包括 LLMStudio，因为它兼容 OpenAI 接口）
             return ChatOpenAI(
@@ -373,7 +383,9 @@ class PromptTestRunner:
                 ]
                 
                 result = chat.invoke(messages)
-                
+                #print(result.content)
+                st.sidebar.write(result.content)
+
                 try:
                     content = result.content
                     json_start = content.find('{')
@@ -468,7 +480,7 @@ def main():
         st.session_state.loaded_cases = []
         st.session_state.errors = []
         st.session_state.results = {}
-    
+        
     # 获取可用的模型商配置
     available_vendors = get_model_configs()
     
@@ -486,11 +498,27 @@ def main():
     for vendor in available_vendors.values():
         baseline_models.extend(vendor.baseline_models)
     
-    # 侧边栏配置
+    # 创建侧边栏
     with st.sidebar:
-        st.header("配置")
+        st.markdown("### 配置")
         
-        # 选择模型商
+        # 提示词项目选择
+        selected_prompt_project = st.selectbox(
+            "选择提示词项目",
+            options=list(st.session_state.runner.prompt_configs.keys()),
+            key='prompt_project_selector'
+        )
+        
+        if selected_prompt_project:
+            prompt_config = st.session_state.runner.prompt_configs[selected_prompt_project]
+            st.write(f"当前提示词: {prompt_config['prompt']}")
+            st.write(f"当前测试用例: {prompt_config['test_cases']}")
+            st.session_state.current_prompt_project = selected_prompt_project
+            
+        st.markdown("---")
+        
+        # 模型选择
+        st.markdown("### 选择模型")
         vendor_names = list(available_vendors.keys())
         selected_vendor_name = st.selectbox(
             "选择模型商",
@@ -525,7 +553,7 @@ def main():
     if st.button("加载提示词和测试用例", key="load_button"):
         with st.spinner("正在加载..."):
             # 加载提示词
-            prompt_length = st.session_state.runner.load_prompt("建造系统")
+            prompt_length = st.session_state.runner.load_prompt(selected_prompt_project)
             st.success(f"提示词加载完成，长度：{prompt_length}")
             
             # 加载测试用例
@@ -570,6 +598,13 @@ def main():
                 st.markdown(f"已选择的模型: {model_list}")
             
             if st.button("运行测试"):
+                if 'current_prompt_project' not in st.session_state:
+                    st.error("请先选择提示词项目")
+                    return
+                
+                selected_project = st.session_state.current_prompt_project
+                prompt_config = PromptTestRunner().prompt_configs[selected_project]
+                
                 st.session_state.results = {}
                 
                 # 对每个选中的模型运行测试
@@ -600,7 +635,7 @@ def main():
                             
                             # 保存测试结果
                             st.session_state.runner.save_test_results(
-                                "建造系统",
+                                selected_project,
                                 model,
                                 case_name,
                                 result,
