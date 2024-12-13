@@ -408,19 +408,27 @@ def main():
         
         with col1:
             st.subheader("测试用例")
-            # 添加"选择全部"按钮
+            
+            # 初始化选中的测试用例
+            if 'selected_test_cases' not in st.session_state:
+                st.session_state.selected_test_cases = [st.session_state.test_cases[0].name]
+            
+            # 选择全部按钮
             if st.button("选择全部用例"):
-                selected_cases = [case.name for case in st.session_state.test_cases]
-            else:
-                selected_cases = st.multiselect(
-                    "选择要运行的测试用例",
-                    options=[case.name for case in st.session_state.test_cases],
-                    default=[st.session_state.test_cases[0].name]
-                )
+                st.session_state.selected_test_cases = [case.name for case in st.session_state.test_cases]
+            
+            # 测试用例多选框
+            selected_cases = st.multiselect(
+                "选择要运行的测试用例",
+                options=[case.name for case in st.session_state.test_cases],
+                default=st.session_state.selected_test_cases
+            )
+            # 更新选中的测试用例
+            st.session_state.selected_test_cases = selected_cases
         
         with col2:
             st.subheader("运行测试")
-            if st.button("运行选中的测试用例"):
+            if st.button("运行测试"):
                 st.session_state.results = {}
                 
                 # 对每个选中的模型运行测试
