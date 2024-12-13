@@ -48,7 +48,7 @@
     "gamestate": {
         "status": <Enum> ["未初始化", "未开始", "进行中", "暂停", "结束"],
         "round": <Number>,
-        "lastEvent": <String>
+        "lastevent": <String>
     },
     "resources": {
         "wood": <Number>,

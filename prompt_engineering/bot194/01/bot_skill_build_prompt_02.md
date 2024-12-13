@@ -58,7 +58,7 @@
         "gamestate": {
             "status": <String>,
             "round": <Number>,
-            "lastEvent": <String>
+            "lastevent": <String>
         },
         "resources": {
             "wood": <Number>,
@@ -234,7 +234,7 @@
         "gamestate": {
             "status": "未初始化",
             "round": 0,
-            "lastEvent": null
+            "lastevent": null
         },
         "resources": null,
         "buildings": null,
@@ -257,7 +257,7 @@
         "gamestate": {
             "status": "进行中",
             "round": 1,
-            "lastEvent": "建造开拓站"
+            "lastevent": "建造开拓站"
         },
         "resources": {
             "wood": 20, 
@@ -306,7 +306,7 @@
         "gamestate": {
             "status": "进行中",
             "round": 1,
-            "lastEvent": "建造失败"
+            "lastevent": "建造失败"
         },
         "resources": {
             "wood": 10,
@@ -355,7 +355,7 @@
         "gamestate": {
             "status": "进行中",
             "round": 1,
-            "lastEvent": "建造开拓站"
+            "lastevent": "建造开拓站"
         },
         "resources": {
             "wood": 20,
@@ -403,7 +403,7 @@
     "gamestate": {
         "status": "测试数据",
         "round": 0,
-        "lastEvent": "测试数据"
+        "lastevent": "测试数据"
     },
     "resources": {
         "wood": 50,
@@ -432,3 +432,5 @@
         "warehouseBonus": 100
     }
 }
+
+```
