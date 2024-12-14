@@ -75,8 +75,8 @@ MODEL_VENDORS = {
     ),
     "GoogleAPI": ModelVendorConfig(
         name="GoogleAPI",
-        models=["gemini-2.0-flash","gemini-1.5-flash","gemini-1.5-pro"],
-        baseline_models=["gemini-2.0-flash"],
+        models=["gemini-1.5-flash","gemini-1.5-pro","gemini-2.0-flash-exp"],
+        baseline_models=["gemini-1.5-flash"],
         api_key_env="GOOGLE_API_KEY",
         base_url=None,
         model_class="ChatGoogleGenerativeAI"
@@ -335,7 +335,7 @@ class PromptTestRunner:
         elif vendor_config.model_class == "ChatGoogleGenerativeAI":
             return ChatGoogleGenerativeAI(
                 model=model_name,
-                google_api_key=os.getenv(vendor_config.api_key_env),
+               api_key=os.getenv(vendor_config.api_key_env),
                 temperature=temperature
                 #,convert_system_message_to_human=True
             )
