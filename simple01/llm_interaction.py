@@ -141,15 +141,31 @@ class LLMInteraction:
         self.add_to_history("user", user_input)
         return user_input  # 简单返回用户输入，后续可以添加更复杂的解析逻辑
     
-    def generate_ai_response(self, game_state):
-        """生成AI响应"""
+    def generate_ai_response(self, user_input, game_state):
+        """生成AI响应
+        
+        Args:
+            user_input (str): 用户输入的文本
+            game_state (dict): 当前游戏状态
+            
+        Returns:
+            str: AI的响应文本
+        """
         self.last_game_state = game_state
         
         # 构建提示
-        prompt = f"""基于当前游戏状态:
+        prompt = f"""基于当前游戏状态和用户输入，请分析并给出建议：
+        
+        用户输入：
+        {user_input}
+        
+        当前游戏状态：
         {game_state}
         
-        请分析局势并给出建议。
+        请分析局势并给出建议。回答要简洁明了，重点说明：
+        1. 对用户输入的理解
+        2. 当前游戏形势分析
+        3. 具体的建议
         """
         
         try:

@@ -1,38 +1,52 @@
 [
     {
-        "name": "火焰龙",
-        "type": "Monster",
-        "attack": 60,
-        "defense": 30,
-        "health": 90,
-        "effects": [
-            { "type": "伤害", "damage": 20 }
-        ]
+        "id": "card_1",
+        "name": "小兵",
+        "type": "随从",
+        "cost": 1,
+        "attack": 1,
+        "health": 1,
+        "effect": "无",
+        "status": "可用"
     },
     {
+        "id": "card_2",
+        "name": "战士",
+        "type": "随从",
+        "cost": 2,
+        "attack": 2,
+        "health": 2,
+        "effect": "嘲讽",
+        "status": "可用"
+    },
+    {
+        "id": "card_3",
+        "name": "弓箭手",
+        "type": "随从",
+        "cost": 3,
+        "attack": 3,
+        "health": 2,
+        "effect": "远程",
+        "status": "可用"
+    },
+    {
+        "id": "card_4",
+        "name": "法师",
+        "type": "随从",
+        "cost": 4,
+        "attack": 2,
+        "health": 3,
+        "effect": "法术伤害+1",
+        "status": "可用"
+    },
+    {
+        "id": "card_5",
         "name": "治疗术",
-        "type": "Spell",
-        "mana_cost": 3,
-         "effects": [
-                 { "type":"治疗", "heal": 10 }
-         ]
-    },
-    {
-      "name": "吸血鬼",
-      "type": "Monster",
-      "attack": 40,
-      "defense": 20,
-        "health": 70,
-     "effects": [
-          { "type": "吸血" }
-       ]
-  },
-  {
-      "name": "陷阱",
-      "type": "Trap",
-      "mana_cost": 2 ,
-      "effects": [
-              {"type": "反伤", "damage": 10}
-      ]
-  }
+        "type": "法术",
+        "cost": 2,
+        "attack": 0,
+        "health": 0,
+        "effect": "恢复3点生命值",
+        "status": "可用"
+    }
 ]
