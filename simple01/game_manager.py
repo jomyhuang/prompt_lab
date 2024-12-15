@@ -45,29 +45,22 @@ class GameManager:
 
     def play_card(self, card_name):
         """使用卡牌"""
-        print(f"尝试使用卡牌: {card_name}")  # 调试信息
-        print(f"当前手牌: {self.game_state['hand_cards']}")  # 调试信息
-        
+        # 检查能量是否足够
+        cost = next((c.get('mana_cost', 0) for c in self.game_state["hand_cards"] if c['name'] == card_name), 0)
+        if self.game_state['player_stats']['energy'] < cost:
+            return f"能量不足: 需要{cost}点能量"
+
         # 从手牌中查找卡牌
         card = next((c for c in self.game_state["hand_cards"] if c['name'] == card_name), None)
         if not card:
-            print(f"找不到卡牌: {card_name}")  # 调试信息
             return f"找不到卡牌: {card_name}"
-
-        # 检查能量是否足够
-        cost = card.get('mana_cost', 0)
-        if self.game_state['player_stats']['energy'] < cost:
-            print(f"能量不足: 需要{cost}点能量")  # 调试信息
-            return "能量不足"
 
         # 扣除能量
         self.game_state['player_stats']['energy'] -= cost
-        print(f"扣除能量{cost}点，剩余能量: {self.game_state['player_stats']['energy']}")  # 调试信息
 
         # 从手牌中移除
         self.game_state["hand_cards"].remove(card)
-        print(f"从手牌移除: {card['name']}")  # 调试信息
-        print(f"移除后手牌: {self.game_state['hand_cards']}")  # 调试信息
+        print("移除手牌:", card_name)
 
         # 创建场上卡牌对象
         field_card = {
@@ -80,12 +73,15 @@ class GameManager:
 
         # 添加到场上
         self.game_state['field_cards'].append(field_card)
-        print(f"添加到场上: {field_card}")  # 调试信息
-        print(f"当前场上卡牌: {self.game_state['field_cards']}")  # 调试信息
+        print("添加到场上:", card_name)
+
+        # 显示当前场上卡牌
+        field_card_names = [card['name'] for card in self.game_state['field_cards']]
+        print("当前场上卡牌:", ", ".join(field_card_names))
 
         # 处理卡牌效果
         effect_result = self._process_card_effects(card)
-        
+
         # 返回成功状态和效果
         return {"status": "success", "message": effect_result}
 
@@ -124,8 +120,21 @@ class GameManager:
         return ", ".join(results)
 
     def get_game_state(self):
-        """获取游戏状态"""
-        return self.game_state
+        """获取完整的游戏状态"""
+        return {
+            "player_stats": {
+                "hp": self.game_state['player_stats']['hp'],
+                "energy": self.game_state['player_stats']['energy'],
+                "armor": self.game_state['player_stats']['armor']
+            },
+            "turn_info": {
+                "current_turn": self.game_state['turn_info']['current_turn'],
+                "phase": self.game_state['turn_info']['phase']
+            },
+            "field_cards": self.game_state['field_cards'],
+            "hand_cards": self.game_state['hand_cards'],
+            "log": self.game_state['log']
+        }
 
     def update_game_state(self, action_result):
         """更新游戏状态"""

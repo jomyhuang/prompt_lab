@@ -1,7 +1,12 @@
-from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.prompts import ChatPromptTemplate
+from langchain.chains import LLMChain
+import google.generativeai as genai
 import os
 from dotenv import load_dotenv
+
+# 加载环境变量
+load_dotenv()
 
 # 定义动作解析提示模板
 ACTION_PARSING_PROMPT = """
@@ -65,88 +70,101 @@ CONTEXT_PROMPT = """
 }}
 """
 
-load_dotenv()
-llm = ChatOpenAI(
-    temperature=0.7,
-    api_key=os.getenv("OPENAI_API_KEY"),
-    model_name=os.getenv("OPENAI_MODEL_NAME"),
-    base_url=os.getenv("OPENAI_API_BASE"),
-    streaming=True,
-    verbose=True
-)
+# 设置Google API密钥
+os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY")
 
 class LLMInteraction:
     def __init__(self):
-        self.action_prompt = PromptTemplate(
-            template=ACTION_PARSING_PROMPT,
-            input_variables=["user_input"]
+        # 初始化Gemini模型
+        self.llm = ChatGoogleGenerativeAI(
+            model=os.getenv("GOOGLE_MODEL_NAME", "gemini-pro"),  # 从环境变量读取模型名称，默认为gemini-pro
+            temperature=0.7,
+            top_p=0.9,
+            top_k=40,
+            max_output_tokens=2048,
         )
-        self.action_chain = self.action_prompt | llm
-
-        self.ai_response_prompt = PromptTemplate(
-            template=AI_RESPONSE_PROMPT,
-            input_variables=["game_state"]
-        )
-        self.ai_response_chain = self.ai_response_prompt | llm
         
-        # 添加上下文相关的属性
+        # 初始化对话历史
         self.chat_history = []
-        self.max_history_length = 10  # 保留最近10轮对话
         self.last_game_state = None
         
-        # 初始化上下文提示模板
-        self.context_prompt = PromptTemplate(
-            template=CONTEXT_PROMPT,
-            input_variables=["chat_history", "game_state", "user_input"]
+        # 设置上下文提示模板
+        context_template = """你是一个卡牌游戏AI助手。基于以下信息帮助玩家:
+        
+        当前游戏状态:
+        {game_state}
+        
+        聊天历史:
+        {chat_history}
+        
+        玩家输入:
+        {user_input}
+        
+        请分析情况并给出建议。注意保持回答简洁明了。
+        """
+        
+        self.context_chain = LLMChain(
+            llm=self.llm,
+            prompt=ChatPromptTemplate.from_template(context_template)
         )
-        self.context_chain = self.context_prompt | llm
-
-    def add_to_history(self, role: str, content: str):
-        """添加对话到历史记录"""
-        self.chat_history.append({"role": role, "content": content})
-        # 保持历史记录在指定长度内
-        if len(self.chat_history) > self.max_history_length:
-            self.chat_history = self.chat_history[-self.max_history_length:]
-
-    def format_history(self) -> str:
-        """格式化历史记录"""
+        
+        # 初始化动作解析提示模板
+        self.action_prompt = ChatPromptTemplate.from_messages([
+            ("system", "你是一个游戏助手，负责解析玩家的行动。"),
+            ("human", "{user_input}")
+        ])
+        self.action_chain = self.action_prompt | self.llm
+        
+        # 初始化AI响应提示模板
+        self.ai_response_prompt = ChatPromptTemplate.from_messages([
+            ("system", "你是一个游戏助手，负责分析游戏状态并给出建议。"),
+            ("human", "{game_state}")
+        ])
+        self.ai_response_chain = self.ai_response_prompt | self.llm
+    
+    def format_history(self):
+        """格式化聊天历史"""
         formatted = []
-        for msg in self.chat_history:
-            formatted.append(f"{msg['role']}: {msg['content']}")
+        for entry in self.chat_history[-5:]:  # 只保留最近5条记录
+            formatted.append(f"{entry['role']}: {entry['content']}")
         return "\n".join(formatted)
-
+    
+    def add_to_history(self, role, content):
+        """添加消息到历史记录"""
+        self.chat_history.append({"role": role, "content": content})
+        if len(self.chat_history) > 10:  # 限制历史记录长度
+            self.chat_history.pop(0)
+    
     def parse_user_action(self, user_input):
+        """解析用户输入"""
         # 添加用户输入到历史记录
         self.add_to_history("user", user_input)
-        
-        # 使用上下文感知的解析
-        context_response = self.context_chain.invoke({
-            "chat_history": self.format_history(),
-            "game_state": str(self.last_game_state),
-            "user_input": user_input
-        })
-        
-        # 添加AI响应到历史记录
-        self.add_to_history("assistant", str(context_response))
-        
-        return context_response
-
+        return user_input  # 简单返回用户输入，后续可以添加更复杂的解析逻辑
+    
     def generate_ai_response(self, game_state):
-        # 保存最新的游戏状态
+        """生成AI响应"""
         self.last_game_state = game_state
         
-        # 使用上下文感知的响应生成
-        ai_response = self.context_chain.invoke({
-            "chat_history": self.format_history(),
-            "game_state": str(game_state),
-            "user_input": self.chat_history[-1]["content"] if self.chat_history else ""
-        })
+        # 构建提示
+        prompt = f"""基于当前游戏状态:
+        {game_state}
         
-        # 添加AI响应到历史记录
-        self.add_to_history("assistant", str(ai_response))
+        请分析局势并给出建议。
+        """
         
-        return ai_response
-
+        try:
+            # 使用Gemini生成响应
+            response = self.llm.invoke(prompt)
+            ai_response = response.content
+            
+            # 添加到历史记录
+            self.add_to_history("assistant", ai_response)
+            return ai_response
+            
+        except Exception as e:
+            print(f"生成响应时出错: {str(e)}")
+            return "抱歉，我现在无法给出建议。"
+    
     def clear_history(self):
         """清除对话历史"""
         self.chat_history = []

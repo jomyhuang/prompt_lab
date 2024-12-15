@@ -3,23 +3,72 @@ from llm_interaction import LLMInteraction
 from game_manager import GameManager
 from player_manager import PlayerManager
 
-def init_session_state():
-    """初始化session state"""
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-        st.session_state.messages = [{"role": "assistant", "content": "How can I help you?"}]
+# 初始化全局session state
+if 'initialized' not in st.session_state:
+    st.session_state.game_manager = GameManager()
+    st.session_state.llm_interaction = LLMInteraction()
+    st.session_state.player_manager = PlayerManager()
+    st.session_state.messages = [{"role": "assistant", "content": "准备好战斗了吗？"}]
+    st.session_state.initialized = True
 
-    if "game_state" not in st.session_state:
-        st.session_state.game_state = {}
+def update_ui_state(show_success_message=None):
+    """更新界面状态
+    Args:
+        show_success_message (str, optional): 如果提供，显示成功消息
+    """
+    if show_success_message:
+        st.success(show_success_message)
+    st.rerun()
 
-def render_game_view(game_manager):
+def process_user_input(user_input):
+    """处理用户输入"""
+    with st.spinner("处理中..."):
+        # 解析用户输入
+        action_result = st.session_state.llm_interaction.parse_user_action(user_input)
+        
+        # 如果是使用卡牌的操作，将卡牌从手牌移到场上
+        if "使用" in user_input and "卡牌" in user_input:
+            selected_card = st.session_state.get("card_select")
+            if selected_card:
+                print("选中的卡牌:", selected_card)
+                
+                # 使用卡牌
+                result = st.session_state.game_manager.play_card(selected_card)
+                if isinstance(result, dict) and result.get("removed_cards"):
+                    # 简化移除卡牌的显示
+                    removed_names = [card['name'] for card in result["removed_cards"]]
+                    print("移除的卡牌:", ", ".join(removed_names))
+                
+                if isinstance(result, dict) and result.get("status") == "success":
+                    success_message = f"成功使用卡牌：{selected_card}"
+                    if result.get("message"):
+                        success_message += f"\n{result['message']}"
+                    update_ui_state(success_message)
+                else:
+                    # 显示错误信息
+                    st.error(result if isinstance(result, str) else "使用卡牌失败")
+        
+        # 更新游戏状态
+        st.session_state.game_manager.update_game_state(action_result)
+
+def render_game_view():
     """渲染游戏画面"""
     st.header("🎮 卡牌战场")
     
-    # 获取游戏状态
-    game_state = game_manager.get_game_state()
+    # 直接从game_manager获取状态
+    game_state = st.session_state.game_manager.get_game_state()
     
-    # 玩家状态区域
+    # 在侧边栏添加状态显示和更新按钮
+    with st.sidebar:
+        st.header("🛠️ 游戏控制台")
+        if st.button("手动更新界面"):
+            update_ui_state("手动更新界面")
+            
+        # 使用expander显示游戏状态
+        with st.expander("🔍 查看游戏状态", expanded=True):
+            st.json(game_state)
+    
+    # 显示玩家状态
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("❤️ 生命", game_state.get("player_stats", {}).get("hp", 0))
@@ -30,13 +79,12 @@ def render_game_view(game_manager):
     
     # 回合信息
     with st.container():
-        st.subheader("🎯 当前回合")
         turn_info = game_state.get("turn_info", {})
         st.info(f"第 {turn_info.get('current_turn', 1)} 回合")
     
     # 场上卡牌区域
     st.subheader("🎯 场上卡牌")
-    field_cards = game_manager.get_field_cards()
+    field_cards = game_state.get("field_cards", [])
     
     if not field_cards:
         st.info("场上暂无卡牌")
@@ -49,21 +97,24 @@ def render_game_view(game_manager):
                     **{card['name']}**  
                     效果: {card['effect']}  
                     状态: {card['status']}
-                """, unsafe_allow_html=True)
+                """)
 
-def render_chat_view(game_manager):
-    """渲染对话界面"""
-    st.title("💬 LLM Card Studo")
-    st.caption("🚀 A Streamlit chatbot powered by Langchain")
-
+def render_chat_view():
+    """渲染聊天界面"""
+    st.header("💬 对话")
+    
     # 玩家手牌和操作区
-    available_cards = game_manager.get_available_cards()
+    available_cards = st.session_state.game_manager.get_available_cards()
+    # 简化手牌显示
+    card_names = [card['name'] for card in available_cards]
+    print("可用卡牌:", ", ".join(card_names))
     
     # 卡牌选择和操作按钮放在同一行
     selected_card = st.selectbox(
         "选择卡牌",
-        options=available_cards,
-        format_func=lambda x: f"{x['name']} - {x['type']} (消耗:{x.get('mana_cost', 0)})",
+        options=[card['name'] for card in available_cards],
+        format_func=lambda x: next((f"{card['name']} - {card['type']} (消耗:{card.get('mana_cost', 0)})" 
+                                  for card in available_cards if card['name'] == x), x),
         key="card_select"
     )
     
@@ -77,12 +128,12 @@ def render_chat_view(game_manager):
     button_cols = st.columns(3)
     with button_cols[0]:
         if st.button("使用卡牌", key="use_card", use_container_width=True):
-            message = f"我要使用{selected_card['name']}卡牌"
+            message = f"我要使用{selected_card}卡牌"
             add_user_message(message)
             process_user_input(message)
     with button_cols[1]:
-        if st.button("询问建议", key="ask_advice", use_container_width=True):
-            message = f"请分析当前局势，并给出使用{selected_card['name']}的建议"
+        if st.button("分析建议", key="analyze_card", use_container_width=True):
+            message = f"请分析当前局势，并给出使用{selected_card}的建议"
             add_user_message(message)
             #process_user_input(message)
     with button_cols[2]:
@@ -91,7 +142,8 @@ def render_chat_view(game_manager):
             add_user_message(message)
             #process_user_input(message)
     
-    chat_container = st.container(height=600)
+    # 渲染聊天消息
+    chat_container = st.container(height=500)
     with chat_container:
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
@@ -106,46 +158,8 @@ def add_assistant_message(message):
     """添加助手消息"""
     st.session_state.messages.append({"role": "assistant", "content": message})
 
-def process_user_input(user_input):
-    """处理用户输入"""
-    with st.spinner("处理中..."):
-        # 解析用户输入
-        action_result = llm_interaction.parse_user_action(user_input)
-        
-        # 如果是使用卡牌的操作，将卡牌从手牌移到场上
-        if "使用" in user_input and "卡牌" in user_input:
-            selected_card = st.session_state.get("card_select")
-            if selected_card:
-                st.write("选中的卡牌:", selected_card)  # 调试信息
-                
-                # 使用卡牌
-                result = game_manager.play_card(selected_card['name'])
-                st.write("使用卡牌结果:", result)  # 调试信息
-                
-                if isinstance(result, dict) and result.get("status") == "success":
-                    st.success(f"成功使用卡牌：{selected_card['name']}")
-                    if result.get("message"):
-                        st.info(result["message"])
-                    
-                    # 显示场上卡牌状态
-                    field_cards = game_manager.get_field_cards()
-                    st.write("场上卡牌:", field_cards)  # 调试信息
-                    
-                    # 强制刷新界面
-                    st.rerun()
-                else:
-                    # 显示错误信息
-                    st.error(result if isinstance(result, str) else "使用卡牌失败")
-        
-        # 更新游戏状态
-        game_state = game_manager.update_game_state(action_result)
-        st.write("当前游戏状态:", game_state)  # 调试信息
-        
-        # 暂时关闭AI响应
-        # ai_response = llm_interaction.generate_ai_response(game_state)
-        # add_assistant_message(ai_response)
-
 def main():
+    """主函数"""
     # 设置页面配置
     st.set_page_config(
         page_title="🎮 AI卡牌游戏",
@@ -153,24 +167,17 @@ def main():
         layout="wide",
         initial_sidebar_state="collapsed"
     )
-  
-    # 初始化session state和管理器
-    init_session_state()
-    global llm_interaction, game_manager, player_manager
-    llm_interaction = LLMInteraction()
-    game_manager = GameManager()
-    player_manager = PlayerManager()
     
-    # 创建左右两列布局
-    game_col, chat_col = st.columns(2)
+    # 分割界面为游戏区和聊天区
+    game_col, chat_col = st.columns([1, 1])
     
-    # 左侧游戏画面
+    # 渲染游戏区
     with game_col:
-        render_game_view(game_manager)
+        render_game_view()
     
-    # 右侧对话区域
+    # 渲染聊天区
     with chat_col:
-        render_chat_view(game_manager)
+        render_chat_view()
 
 if __name__ == "__main__":
     main()
