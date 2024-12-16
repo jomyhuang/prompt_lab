@@ -352,7 +352,7 @@ class GameManager:
         self._player_phase_transition(1.0)
         # 暂时默认玩家先手
         first_player = "player"
-        self.add_game_message(f"🎲 **{'你' if first_player == 'player' else '对手'}先手**")
+        self.add_game_message(f"👤 **{'你' if first_player == 'player' else '对手'}先手**")
         debug_utils.log("game", "决定先手", {"先手玩家": first_player})
         
         # 设置先手玩家
@@ -364,8 +364,10 @@ class GameManager:
         self.game_state["turn_info"]["current_turn"] += 1
         active_player = self.game_state["turn_info"]["active_player"]
         
-        # 重置能量
-        max_energy = min(10, self.game_state["turn_info"]["current_turn"])
+        # 重置能量 - 基础能量为3，每回合+1，最大10点
+        base_energy = 3
+        turn_bonus = self.game_state["turn_info"]["current_turn"] - 1
+        max_energy = min(10, base_energy + turn_bonus)
         self.game_state[f"{active_player}_stats"]["energy"] = max_energy
         
         self.add_game_message(
@@ -432,7 +434,7 @@ class GameManager:
             return False
             
         elif player_turn_state == "end_turn":
-            # 回合���束阶段
+            # 回合结束阶段
             self.add_game_message("🔄 **你的回合结束了**")
             self.game_state["player_turn_state"] = "start"
             return True
@@ -441,7 +443,6 @@ class GameManager:
 
     def _process_opponent_turn(self):
         """处理对手回合"""
-        # 获取当前对手回合状态
         opponent_turn_state = self.game_state.get("opponent_turn_state", "start")
         
         if opponent_turn_state == "start":
@@ -463,13 +464,27 @@ class GameManager:
             # AI行动阶段
             self._ai_thinking("正在计算最佳行动...")
             
-            # 对手简单AI：随机打出一张手牌
+            # 对手简单AI：随机打一张手牌
             opponent_hand = self.game_state["hand_cards"]["opponent"]
             if opponent_hand:
-                card_to_play = random.choice(opponent_hand)
-                self.game_state["hand_cards"]["opponent"].remove(card_to_play)
-                self.game_state["field_cards"]["opponent"].append(card_to_play)
-                self.add_game_message(f"🎴 对手使用了 {card_to_play['name']}")
+                # 筛选能量足够的卡牌
+                playable_cards = [
+                    card for card in opponent_hand 
+                    if card.get("cost", 0) <= self.game_state["opponent_stats"]["energy"]
+                ]
+                
+                if playable_cards:
+                    card_to_play = random.choice(playable_cards)
+                    # 扣除能量
+                    self.game_state["opponent_stats"]["energy"] -= card_to_play.get("cost", 0)
+                    # 使用卡牌
+                    self.game_state["hand_cards"]["opponent"].remove(card_to_play)
+                    self.game_state["field_cards"]["opponent"].append(card_to_play)
+                    self.add_game_message(
+                        f"🎴 对手使用了 {card_to_play['name']}\n"
+                        f"消耗能量: {card_to_play.get('cost', 0)}, "
+                        f"剩余能量: {self.game_state['opponent_stats']['energy']}"
+                    )
             
             self.game_state["opponent_turn_state"] = "end_turn"
             return False
@@ -490,5 +505,143 @@ class GameManager:
             message: 思考内容提示
             duration: 思考时间（秒）
         """
-        self.add_game_message(f"💭 {message}")
+        self.add_game_message(f"🤖AI 正在思考: {message}")
         self._player_phase_transition(duration)
+
+    def save_game(self, save_name):
+        """保存游戏状态到文件
+        
+        Args:
+            save_name: 存档名称
+            
+        Returns:
+            tuple: (bool, str) - (是否成功, 成功/错误信息)
+        """
+        try:
+            # 确保存档目录存在
+            save_dir = os.path.join(os.path.dirname(__file__), "saves")
+            os.makedirs(save_dir, exist_ok=True)
+            
+            # 准备保存数据
+            current_time = time.strftime("%Y-%m-%d %H:%M:%S")
+            save_data = {
+                "info": {
+                    "save_time": current_time,
+                    "save_name": save_name,
+                    "turn": self.game_state.get("turn_info", {}).get("current_turn", 0),
+                    "player_hp": self.game_state.get("player_stats", {}).get("hp", 0),
+                    "opponent_hp": self.game_state.get("opponent_stats", {}).get("hp", 0)
+                },
+                "game_state": self.game_state,
+                "deck_state": self.deck_state,
+                "selected_decks": self.selected_decks
+            }
+            
+            # 保存到文件
+            save_path = os.path.join(save_dir, f"{save_name}.json")
+            with open(save_path, "w", encoding="utf-8") as f:
+                json.dump(save_data, f, ensure_ascii=False, indent=2)
+                
+            debug_utils.log("game", "保存游戏成功", {
+                "存档名称": save_name,
+                "存档路径": save_path,
+                "保存时间": current_time
+            })
+            return True, f"游戏已保存到: {save_name}"
+            
+        except Exception as e:
+            debug_utils.log("game", "保存游戏失败", {"错误": str(e)})
+            return False, f"保存失败: {str(e)}"
+
+    def load_game(self, save_name):
+        """从文件加载游戏状态
+        
+        Args:
+            save_name: 存档名称
+            
+        Returns:
+            tuple: (bool, str) - (是否成功, 成功/错误信息)
+        """
+        try:
+            # 构建存档路径
+            save_dir = os.path.join(os.path.dirname(__file__), "saves")
+            save_path = os.path.join(save_dir, f"{save_name}.json")
+            
+            # 检查文件是否存在
+            if not os.path.exists(save_path):
+                return False, f"存档文件不存在: {save_name}"
+            
+            # 读取存档文件
+            with open(save_path, "r", encoding="utf-8") as f:
+                save_data = json.load(f)
+            
+            # 验证必要的游戏数据
+            if "game_state" not in save_data or "deck_state" not in save_data:
+                return False, "存档数据缺少必要的游戏状态数据"
+            
+            # 使用深拷贝恢复游戏状态
+            import copy
+            self.game_state = copy.deepcopy(save_data["game_state"])
+            self.deck_state = copy.deepcopy(save_data["deck_state"])
+            
+            # 检查并处理可选数据
+            warning_messages = []
+            
+            if "selected_decks" not in save_data:
+                warning_messages.append("警告: 存档中缺少卡组选择数据")
+                self.selected_decks = None
+            else:
+                self.selected_decks = copy.deepcopy(save_data["selected_decks"])
+            
+            # 获取存档信息（如果有的话）
+            info = save_data.get("info", {})
+            save_time = info.get("save_time", "未知时间")
+            turn = self.game_state.get("turn_info", {}).get("current_turn", 0)
+            player_hp = self.game_state.get("player_stats", {}).get("hp", 0)
+            opponent_hp = self.game_state.get("opponent_stats", {}).get("hp", 0)
+            
+            if not info:
+                warning_messages.append("警告: 存档中缺少详细信息数据")
+            
+            debug_utils.log("game", "加载游戏成功", {
+                "存档名称": save_name,
+                "存档路径": save_path,
+                "警告信息": warning_messages if warning_messages else "无"
+                # "游戏状态": self.game_state
+            })
+            
+            success_message = [f"成功加载存档: {save_name}",
+                             f"保存时间: {save_time}",
+                             f"回合数: {turn}",
+                             f"玩家生命: {player_hp}",
+                             f"对手生命: {opponent_hp}"]
+            
+            if warning_messages:
+                success_message.extend(warning_messages)
+            
+            return True, "\n".join(success_message)
+            
+        except json.JSONDecodeError:
+            return False, "存档文件格式错误"
+        except Exception as e:
+            debug_utils.log("game", "加载游戏失败", {"错误": str(e)})
+            return False, f"加载失败: {str(e)}"
+
+    def get_save_files(self):
+        """获取所有存档文件列表
+        
+        Returns:
+            list: 存档文件名列表（不含.json后缀）
+        """
+        try:
+            save_dir = os.path.join(os.path.dirname(__file__), "saves")
+            if not os.path.exists(save_dir):
+                return []
+                
+            # 获取所有.json文件并去掉后缀
+            save_files = [f[:-5] for f in os.listdir(save_dir) if f.endswith('.json')]
+            return sorted(save_files)
+            
+        except Exception as e:
+            debug_utils.log("game", "获取存档列表失败", {"错误": str(e)})
+            return []

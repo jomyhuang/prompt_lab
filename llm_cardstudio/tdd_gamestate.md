@@ -46,7 +46,6 @@ end_game：
     游戏结束
 
 
-
 GUI 渲染：
 sidebar
     - 游戏状态信息，默认折叠起来

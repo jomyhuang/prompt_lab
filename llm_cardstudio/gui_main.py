@@ -3,6 +3,10 @@ from llm_interaction import LLMInteraction
 from game_manager import GameManager
 from player_manager import PlayerManager
 from debug_utils import debug_utils
+import os
+import json
+import time
+from datetime import datetime
 
 # 初始化全局session state
 if 'initialized' not in st.session_state:
@@ -61,22 +65,14 @@ def process_user_input(user_input):
                 
                 # 使用卡牌
                 result = st.session_state.game_manager.play_card(selected_card)
-                if isinstance(result, dict) and result.get("removed_cards"):
-                    # 简化移除卡牌的显示
-                    removed_names = [card['name'] for card in result["removed_cards"]]
-                    debug_utils.log("card", "移除卡牌", removed_names)
-                
-                if isinstance(result, dict) and result.get("status") == "success":
-                    success_message = f"成功使用卡牌：{selected_card}"
-                    if result.get("message"):
-                        success_message += f"\n{result['message']}"
-                    update_ui_state(success_message)
-                else:
-                    # 显示错误信息
-                    st.error(result if isinstance(result, str) else "使用卡牌失败")
-        
-        # 更新游戏状态
-        # st.session_state.game_manager.update_game_state(action_result)
+                success_message = f"成功使用卡牌：{selected_card}"
+                update_ui_state(success_message)
+                return
+    
+    # 如果用户输入不是使用卡牌的操作，则直接更新UI状态
+    process_message = user_input
+    update_ui_state(process_message)
+
 
 def render_game_view():
     """渲染游戏画面"""
@@ -89,6 +85,38 @@ def render_game_view():
     # 在侧边栏添加状态显示和更新按钮
     with st.sidebar:
         st.header("🛠️ 游戏控制台")
+        
+        # 添加保存和载入游戏按钮
+        if gameloop_state != "welcome":
+            # 保存游戏
+            save_name = datetime.now().strftime("save_%Y%m%d-%H%M")
+            st.write(f"存档名称: {save_name}")
+
+            if st.button("💾 保存游戏", use_container_width=True):
+                success, message = st.session_state.game_manager.save_game(save_name)
+                if success:
+                    st.success(message)
+                else:
+                    st.error(message)
+        
+        # 载入游戏功能仅在welcome状态可用
+        if gameloop_state == "welcome":
+            save_files = st.session_state.game_manager.get_save_files()
+            if save_files:
+                selected_save = st.selectbox(
+                    "选择存档",
+                    options=save_files,
+                    format_func=lambda x: f"存档: {x}",
+                    key="load_save"
+                )
+                if st.button("📂 载入游戏", use_container_width=True):
+                    success, message = st.session_state.game_manager.load_game(selected_save)
+                    if success:
+                        st.success(message)
+                        st.rerun()
+                    else:
+                        st.error(message)
+        
         if st.button("手动更新界面"):
             update_ui_state("手动更新界面")
             
@@ -111,7 +139,6 @@ def render_game_view():
         st.markdown("### 👋 欢迎来到卡牌游戏！")
         
         # 加载卡组数据
-        import json
         with open('simple01/decks.json', 'r', encoding='utf-8') as f:
             decks_data = json.load(f)
         
@@ -176,7 +203,7 @@ def render_game_view():
 
         return
     
-    # 显示回合信息
+    # 显示回合息
     st.caption(f"第 {game_state['turn_info']['current_turn']} 回合 - {'我方回合' if game_state['turn_info']['active_player'] == 'player' else '对手回合'}")
     
     # 显示对手状态
@@ -207,7 +234,7 @@ def render_game_view():
     if not opponent_field_cards:
         st.caption("对手场上暂无卡牌")
     else:
-        cols = st.columns(len(opponent_field_cards))
+        cols = st.columns(len(opponent_field_cards), border=True)
         for idx, card in enumerate(opponent_field_cards):
             with cols[idx]:
                 st.markdown(f"""
@@ -226,7 +253,7 @@ def render_game_view():
     if not player_field_cards:
         st.caption("我方场上暂无卡牌")
     else:
-        cols = st.columns(len(player_field_cards))
+        cols = st.columns(len(player_field_cards), border=True)
         for idx, card in enumerate(player_field_cards):
             with cols[idx]:
                 st.markdown(f"""
@@ -275,13 +302,13 @@ def render_game_controls(gameloop_state):
 
 def render_chat_view():
     """渲染聊天界面"""
-    st.header("💬 对话")
+    st.header("💬 LLM Card Studio")
     
     # 获取游戏状态
     game_state = st.session_state.game_manager.get_game_state()
     gameloop_state = game_state.get("gameloop_state", "welcome")
     
-    # 渲染聊���消息（在任何回合都显示）
+    # 渲聊天消息（在任何回合都显示）
     chat_container = st.container(height=500)
     with chat_container:
         for message in st.session_state.messages:
@@ -300,7 +327,7 @@ def render_chat_view():
         # 玩家回合界面
         st.markdown("### 🎮 你的回合")
         
-        # 只有在action阶段才显示交互界面
+        # 有在action阶段才显示交互界面
         player_turn_state = game_state.get("player_turn_state")
         if player_turn_state == "action":
             # 玩家手牌和操作区
@@ -328,7 +355,7 @@ def render_chat_view():
             # 添加快捷操作钮
             with button_cols[0]:
                 if st.button("使用卡牌", key="use_card", use_container_width=True):
-                    message = f"我要使用{selected_card_name}卡牌"
+                    message = f"我使用{selected_card_name}卡牌"
                     add_user_message(message)
                     process_user_input(message)
                     
@@ -340,7 +367,7 @@ def render_chat_view():
                     
             with button_cols[2]:
                 if st.button("结束回合", key="end_turn", use_container_width=True):
-                    message = "我要结束当前回合"
+                    message = "我要束当前回合"
                     add_user_message(message)
                     st.session_state.game_manager.game_state["player_turn_state"] = "end_turn"
                     st.session_state.game_manager._process_gameloop_state()
@@ -364,7 +391,7 @@ def render_chat_view():
         st.markdown("### 🤖 对手回合")
         st.session_state.game_manager._process_gameloop_state()
 
-    # 处理自动过渡下一个状态        
+    # 处理自动过渡一个状态        
     last_state = st.session_state.get("last_gameloop_state", None)
     if (gameloop_state != "welcome" and 
         gameloop_state != "player_turn" and 
