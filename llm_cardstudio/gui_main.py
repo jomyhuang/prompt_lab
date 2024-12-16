@@ -138,8 +138,14 @@ def render_game_view():
     if gameloop_state == "welcome":
         st.markdown("### 👋 欢迎来到卡牌游戏！")
         
-        # 加载卡组数据
-        with open('simple01/decks.json', 'r', encoding='utf-8') as f:
+        # 获取当前文件所在目录的路径
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+
+        # 构建完整的文件路径
+        decks_json_path = os.path.join(current_dir, 'decks.json')
+
+        # 使用完整路径打开文件
+        with open(decks_json_path, 'r', encoding='utf-8') as f:
             decks_data = json.load(f)
         
         # 创建卡组选择列
@@ -162,7 +168,8 @@ def render_game_view():
                     st.write(f"**卡组描述:** {decks_data[player_deck]['description']}")
                     st.write("**卡牌列表:**")
                     # 读取cards.json获取卡牌详细信息
-                    with open('simple01/cards.json', 'r', encoding='utf-8') as f:
+                    cards_json_path = os.path.join(current_dir, 'cards.json')
+                    with open(cards_json_path, 'r', encoding='utf-8') as f:
                         cards_data = json.load(f)
                     cards_dict = {card['id']: card for card in cards_data}
                     for card_id in decks_data[player_deck]['cards']:
