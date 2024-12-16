@@ -1,4 +1,5 @@
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain.chains import LLMChain
 import google.generativeai as genai
@@ -76,14 +77,20 @@ os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY")
 class LLMInteraction:
     def __init__(self):
         # 初始化Gemini模型
-        self.llm = ChatGoogleGenerativeAI(
-            model=os.getenv("GOOGLE_MODEL_NAME", "gemini-pro"),  # 从环境变量读取模型名称，默认为gemini-pro
+        # self.llm = ChatGoogleGenerativeAI(
+        #     api_key=os.getenv("GOOGLE_API_KEY"),
+        #     model=os.getenv("GOOGLE_MODEL_NAME", "gemini-pro"),  # 从环境变量读取模型名称，默认为gemini-pro
+        #     temperature=0.7,
+        #     streaming=True
+        # )
+        self.llm = ChatOpenAI(
+            api_key=os.getenv("OPENAI_API_KEY"),
+            model=os.getenv("OPENAI_MODEL_NAME", "gpt-4o"),  # 从环境变量读取模型名称，默认为gpt-4o
+            base_url=os.getenv("OPENAI_API_BASE"),
             temperature=0.7,
-            top_p=0.9,
-            top_k=40,
-            max_output_tokens=2048,
+            streaming=True
         )
-        
+
         # 初始化对话历史
         self.chat_history = []
         self.last_game_state = None
@@ -170,9 +177,10 @@ class LLMInteraction:
         
         try:
             # 使用Gemini生成响应
+            # print(f"prompt: {prompt}")
             response = self.llm.invoke(prompt)
             ai_response = response.content
-            
+            # print(f"ai_response: {ai_response}")
             # 添加到历史记录
             self.add_to_history("assistant", ai_response)
             return ai_response

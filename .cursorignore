@@ -13,6 +13,7 @@ env/
 .env/
 
 # 忽略特定文件夹
+./examples/
 
 
 

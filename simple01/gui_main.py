@@ -2,7 +2,7 @@ import streamlit as st
 from llm_interaction import LLMInteraction
 from game_manager import GameManager
 from player_manager import PlayerManager
-import debug_utils
+from debug_utils import debug_utils
 
 # 初始化全局session state
 if 'initialized' not in st.session_state:
@@ -33,16 +33,19 @@ def process_user_input_ai(user_input):
     })
     
     # 在右上角显示运行状态
-    with st.status("AI思考中...", expanded=False) as status:
-        # 生成AI响应
-        ai_response = st.session_state.llm_interaction.generate_ai_response(user_input, game_state)
-        status.update(label="完成", state="complete")
+    status_container = st.container()
+    with status_container:
+        with st.status("AI思考中...", expanded=False) as status:
+            # 生成AI响应
+            ai_response = st.session_state.llm_interaction.generate_ai_response(user_input, game_state)
+            status.update(label="完成", state="complete")
     
     # 添加AI响应到消息历史
     st.session_state.messages.append({"role": "assistant", "content": ai_response})
     
     # 记录调试信息
     debug_utils.log("llm", "AI响应", {"响应内容": ai_response})
+    st.rerun()
 
 def process_user_input(user_input):
     """处理用户输入"""
@@ -73,7 +76,7 @@ def process_user_input(user_input):
                     st.error(result if isinstance(result, str) else "使用卡牌失败")
         
         # 更新游戏状态
-        st.session_state.game_manager.update_game_state(action_result)
+        # st.session_state.game_manager.update_game_state(action_result)
 
 def render_game_view():
     """渲染游戏画面"""
@@ -106,9 +109,71 @@ def render_game_view():
     
     if gameloop_state == "welcome":
         st.markdown("### 👋 欢迎来到卡牌游戏！")
-        if st.button("开始游戏", key="start_game"):
+        
+        # 加载卡组数据
+        import json
+        with open('simple01/decks.json', 'r', encoding='utf-8') as f:
+            decks_data = json.load(f)
+        
+        # 创建卡组选择列
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### 🎮 选择你的卡组")
+            player_deck = st.selectbox(
+                "我方卡组",
+                options=list(decks_data.keys()),
+                format_func=lambda x: f"{decks_data[x]['name']} - {decks_data[x]['description']}",
+                key="player_deck_select"
+            )
+            
+            # 显示选中卡组的详细信息
+            if player_deck:
+                # with st.expander("查看卡组详情", expanded=True):
+                with st.container(height=300):
+                    st.write(f"**卡组名称:** {decks_data[player_deck]['name']}")
+                    st.write(f"**卡组描述:** {decks_data[player_deck]['description']}")
+                    st.write("**卡牌列表:**")
+                    # 读取cards.json获取卡牌详细信息
+                    with open('simple01/cards.json', 'r', encoding='utf-8') as f:
+                        cards_data = json.load(f)
+                    cards_dict = {card['id']: card for card in cards_data}
+                    for card_id in decks_data[player_deck]['cards']:
+                        if card_id in cards_dict:
+                            card = cards_dict[card_id]
+                            st.write(f"- {card['name']} ({card['type']}, 费用:{card['cost']})")
+        
+        with col2:
+            st.markdown("#### 🤖 选择对手卡组")
+            opponent_deck = st.selectbox(
+                "对手卡组",
+                options=list(decks_data.keys()),
+                format_func=lambda x: f"{decks_data[x]['name']} - {decks_data[x]['description']}",
+                key="opponent_deck_select"
+            )
+            
+            # 显示选中卡组的详细信息
+            if opponent_deck:
+                # with st.expander("查看卡组详情", expanded=True):
+                with st.container(height=300):
+                    st.write(f"**卡组名称:** {decks_data[opponent_deck]['name']}")
+                    st.write(f"**卡组描述:** {decks_data[opponent_deck]['description']}")
+                    st.write("**卡牌列表:**")
+                    for card_id in decks_data[opponent_deck]['cards']:
+                        if card_id in cards_dict:
+                            card = cards_dict[card_id]
+                            st.write(f"- {card['name']} ({card['type']}, 费用:{card['cost']})")
+        
+        # 开始游戏按钮
+        if st.button("开始游戏", key="start_game", use_container_width=True):
+            # 保存选择的卡组到游戏状态
+            st.session_state.game_manager.selected_decks = {
+                "player": decks_data[player_deck]['cards'],
+                "opponent": decks_data[opponent_deck]['cards']
+            }
             st.session_state.game_manager.start_game()
             st.rerun()
+
         return
     
     # 显示回合信息
@@ -117,8 +182,9 @@ def render_game_view():
     # 显示对手状态
     st.markdown("### 🤖 对手状态")
     opponent_stats = game_state.get("opponent_stats", {})
-    opponent_deck = game_state.get("deck_cards", {}).get("opponent", [])
-    col1, col2, col3, col4 = st.columns(4)
+    opponent_deck_count = len(game_state.get("deck_state", {}).get("opponent", {}).get("deck", []))
+    opponent_hand = game_state.get("hand_cards", {}).get("opponent", [])
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         st.caption("生命值")
         st.markdown(f"❤️ {opponent_stats.get('hp', 0)}")
@@ -130,7 +196,10 @@ def render_game_view():
         st.markdown(f"🛡️ {opponent_stats.get('armor', 0)}")
     with col4:
         st.caption("牌堆")
-        st.markdown(f"🎴 {len(opponent_deck)}")
+        st.markdown(f"🎴 {opponent_deck_count}")
+    with col5:
+        st.caption("手牌")
+        st.markdown(f"✋ {len(opponent_hand)}")
     
     # 对手场上卡牌
     st.markdown("#### 🎯 对手场上卡牌")
@@ -170,8 +239,9 @@ def render_game_view():
     # 显示玩家状态
     st.markdown("### 👤 我方状态")
     player_stats = game_state.get("player_stats", {})
-    player_deck = game_state.get("deck_cards", {}).get("player", [])
-    col1, col2, col3, col4 = st.columns(4)
+    player_deck_count = len(game_state.get("deck_state", {}).get("player", {}).get("deck", []))
+    player_hand = game_state.get("hand_cards", {}).get("player", [])
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         st.caption("生命值")
         st.markdown(f"❤️ {player_stats.get('hp', 0)}")
@@ -183,7 +253,10 @@ def render_game_view():
         st.markdown(f"🛡️ {player_stats.get('armor', 0)}")
     with col4:
         st.caption("牌堆")
-        st.markdown(f"🎴 {len(player_deck)}")
+        st.markdown(f"🎴 {player_deck_count}")
+    with col5:
+        st.caption("手牌")
+        st.markdown(f"✋ {len(player_hand)}")
 
     # 渲染游戏控制区域
     render_game_controls(gameloop_state)
@@ -208,7 +281,7 @@ def render_chat_view():
     game_state = st.session_state.game_manager.get_game_state()
     gameloop_state = game_state.get("gameloop_state", "welcome")
     
-    # 渲染聊天消息（在任何回合都显示）
+    # 渲染聊���消息（在任何回合都显示）
     chat_container = st.container(height=500)
     with chat_container:
         for message in st.session_state.messages:
@@ -247,11 +320,12 @@ def render_chat_view():
             if user_input:
                 add_user_message(user_input)
                 process_user_input_ai(user_input)
+                st.rerun()
             
             # 创建按钮列
             button_cols = st.columns(3)
             
-            # 添加快捷操作按钮
+            # 添加快捷操作钮
             with button_cols[0]:
                 if st.button("使用卡牌", key="use_card", use_container_width=True):
                     message = f"我要使用{selected_card_name}卡牌"
@@ -260,7 +334,7 @@ def render_chat_view():
                     
             with button_cols[1]:
                 if st.button("给出建议", key="get_advice", use_container_width=True):
-                    message = f"请分析当前局势，并给出使用{selected_card_name}的建议"
+                    message = f"分析当前局势，并给出使用{selected_card_name}的建议"
                     add_user_message(message)
                     process_user_input(message)
                     

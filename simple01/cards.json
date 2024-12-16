@@ -48,5 +48,255 @@
         "health": 0,
         "effect": "恢复3点生命值",
         "status": "可用"
+    },
+    {
+        "id": "card_26",
+        "name": "魔法学徒",
+        "type": "随从",
+        "cost": 2,
+        "attack": 1,
+        "health": 3,
+        "effect": "法术伤害+1,抽一张牌",
+        "status": "可用"
+    },
+    {
+        "id": "card_27",
+        "name": "时光倒流",
+        "type": "法术",
+        "cost": 4,
+        "attack": 0,
+        "health": 0,
+        "effect": "将一个随从的生命值恢复到满值",
+        "status": "可用"
+    },
+    {
+        "id": "card_28",
+        "name": "铁甲守卫",
+        "type": "随从",
+        "cost": 3,
+        "attack": 2,
+        "health": 5,
+        "effect": "嘲讽,受到伤害时获得1点护甲",
+        "status": "可用"
+    },
+    {
+        "id": "card_29",
+        "name": "连环闪电",
+        "type": "法术",
+        "cost": 3,
+        "attack": 0,
+        "health": 0,
+        "effect": "对一个随从造成3点伤害,多余的伤害传递给相邻随从",
+        "status": "可用"
+    },
+    {
+        "id": "card_30",
+        "name": "生命收割者",
+        "type": "随从",
+        "cost": 6,
+        "attack": 5,
+        "health": 5,
+        "effect": "战吼:摧毁一个生命值小于2的随从",
+        "status": "可用"
+    },
+    {
+        "id": "card_6",
+        "name": "重装骑士",
+        "type": "随从",
+        "cost": 5,
+        "attack": 4,
+        "health": 5,
+        "effect": "嘲讽,护甲+2",
+        "status": "可用"
+    },
+    {
+        "id": "card_7",
+        "name": "火球术",
+        "type": "法术",
+        "cost": 3,
+        "attack": 0,
+        "health": 0,
+        "effect": "造成4点伤害",
+        "status": "可用"
+    },
+    {
+        "id": "card_8",
+        "name": "圣光牧师",
+        "type": "随从",
+        "cost": 3,
+        "attack": 2,
+        "health": 4,
+        "effect": "回合结束时治疗1点生命",
+        "status": "可用"
+    },
+    {
+        "id": "card_9",
+        "name": "狂战士",
+        "type": "随从",
+        "cost": 4,
+        "attack": 5,
+        "health": 3,
+        "effect": "狂暴:受伤时攻击力+1",
+        "status": "可用"
+    },
+    {
+        "id": "card_10",
+        "name": "寒冰护盾",
+        "type": "法术",
+        "cost": 2,
+        "attack": 0,
+        "health": 0,
+        "effect": "获得3点护甲",
+        "status": "可用"
+    },
+    {
+        "id": "card_11",
+        "name": "暗影刺客",
+        "type": "随从",
+        "cost": 3,
+        "attack": 4,
+        "health": 2,
+        "effect": "潜行",
+        "status": "可用"
+    },
+    {
+        "id": "card_12",
+        "name": "龙息术",
+        "type": "法术",
+        "cost": 5,
+        "attack": 0,
+        "health": 0,
+        "effect": "对所有敌方随从造成2点伤害",
+        "status": "可用"
+    },
+    {
+        "id": "card_13",
+        "name": "圣盾卫士",
+        "type": "随从",
+        "cost": 4,
+        "attack": 3,
+        "health": 4,
+        "effect": "圣盾",
+        "status": "可用"
+    },
+    {
+        "id": "card_14",
+        "name": "生命之泉",
+        "type": "法术",
+        "cost": 4,
+        "attack": 0,
+        "health": 0,
+        "effect": "恢复所有友方角色2点生命",
+        "status": "可用"
+    },
+    {
+        "id": "card_15",
+        "name": "雷霆巨人",
+        "type": "随从",
+        "cost": 6,
+        "attack": 6,
+        "health": 6,
+        "effect": "法术伤害+2",
+        "status": "可用"
+    },
+    {
+        "id": "card_16",
+        "name": "魔法飞弹",
+        "type": "法术",
+        "cost": 1,
+        "attack": 0,
+        "health": 0,
+        "effect": "造成2点伤害",
+        "status": "可用"
+    },
+    {
+        "id": "card_17",
+        "name": "丛林猎手",
+        "type": "随从",
+        "cost": 4,
+        "attack": 3,
+        "health": 5,
+        "effect": "突袭",
+        "status": "可用"
+    },
+    {
+        "id": "card_18",
+        "name": "能量护罩",
+        "type": "法术",
+        "cost": 3,
+        "attack": 0,
+        "health": 0,
+        "effect": "获得5点护甲",
+        "status": "可用"
+    },
+    {
+        "id": "card_19",
+        "name": "巨龙守卫",
+        "type": "随从",
+        "cost": 7,
+        "attack": 5,
+        "health": 8,
+        "effect": "嘲讽,无法被法术选中",
+        "status": "可用"
+    },
+    {
+        "id": "card_20",
+        "name": "暗影箭",
+        "type": "法术",
+        "cost": 2,
+        "attack": 0,
+        "health": 0,
+        "effect": "造成3点伤害并使目标获得-1攻击力",
+        "status": "可用"
+    },
+    {
+        "id": "card_21",
+        "name": "圣光战士",
+        "type": "随从",
+        "cost": 5,
+        "attack": 4,
+        "health": 6,
+        "effect": "圣盾,嘲讽",
+        "status": "可用"
+    },
+    {
+        "id": "card_22",
+        "name": "奥术智慧",
+        "type": "法术",
+        "cost": 3,
+        "attack": 0,
+        "health": 0,
+        "effect": "抽两张牌",
+        "status": "可用"
+    },
+    {
+        "id": "card_23",
+        "name": "风暴元素",
+        "type": "随从",
+        "cost": 4,
+        "attack": 4,
+        "health": 4,
+        "effect": "战吼:造成2点伤害",
+        "status": "可用"
+    },
+    {
+        "id": "card_24",
+        "name": "生命之触",
+        "type": "法术",
+        "cost": 1,
+        "attack": 0,
+        "health": 0,
+        "effect": "恢复2点生命值",
+        "status": "可用"
+    },
+    {
+        "id": "card_25",
+        "name": "黑暗祭司",
+        "type": "随从",
+        "cost": 5,
+        "attack": 3,
+        "health": 6,
+        "effect": "法术伤害+2,回合结束时恢复1点生命",
+        "status": "可用"
     }
 ]

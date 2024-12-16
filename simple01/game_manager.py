@@ -9,6 +9,7 @@ class GameManager:
     def __init__(self):
         """初始化游戏管理器"""
         self.load_cards()
+        self.selected_decks = None
         self._initialize_game_state()
 
     def _initialize_game_state(self):
@@ -45,13 +46,11 @@ class GameManager:
         self.deck_state = {
             "player": {
                 "deck": [],
-                "deck_size": 30,
                 "draw_history": [],
                 "discard_pile": []
             },
             "opponent": {
                 "deck": [],
-                "deck_size": 30,
                 "draw_history": [],
                 "discard_pile": []
             }
@@ -301,7 +300,41 @@ class GameManager:
         self._player_phase_transition(1.0)
         self.add_game_message("🎮 **游戏初始化...**")
         debug_utils.log("game", "游戏初始化")
+        
+        # 重新初始化游戏状态
         self._initialize_game_state()
+        
+        # 如果有选择的卡组，初始化玩家和对手的卡组
+        if self.selected_decks:
+            # 获取完整的卡牌信息
+            player_cards = []
+            opponent_cards = []
+            
+            # 将卡牌ID转换为完整的卡牌信息
+            for card_id in self.selected_decks["player"]:
+                card = next((c for c in self.available_cards if c["id"] == card_id), None)
+                if card:
+                    player_cards.append(card.copy())
+                    
+            for card_id in self.selected_decks["opponent"]:
+                card = next((c for c in self.available_cards if c["id"] == card_id), None)
+                if card:
+                    opponent_cards.append(card.copy())
+            
+            # 随机打乱卡组
+            random.shuffle(player_cards)
+            random.shuffle(opponent_cards)
+            
+            # 设置卡组
+            self.deck_state["player"]["deck"] = player_cards
+            self.deck_state["opponent"]["deck"] = opponent_cards
+            
+            debug_utils.log("game", "卡组初始化", {
+                "玩家卡组数量": len(player_cards),
+                "对手卡组数量": len(opponent_cards)
+            })
+        else:
+            debug_utils.log("game", "警告：没有选择卡组")
 
     def _process_deal_cards(self):
         """处理发牌阶段"""
@@ -399,7 +432,7 @@ class GameManager:
             return False
             
         elif player_turn_state == "end_turn":
-            # 回合结束阶段
+            # 回合���束阶段
             self.add_game_message("🔄 **你的回合结束了**")
             self.game_state["player_turn_state"] = "start"
             return True
