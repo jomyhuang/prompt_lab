@@ -8,10 +8,8 @@ from debug_utils import debug_utils
 class GameManager:
     def __init__(self):
         """初始化游戏管理器"""
-        self._initialize_game_state(active_player=None)
         self.load_cards()
-        # 移除init_hand_cards的调用，因为现在手牌发放由游戏开始流程控制
-        # self.init_hand_cards()
+        self._initialize_game_state(active_player=None)
 
     def _initialize_game_state(self, active_player=None):
         """初始化游戏状态
@@ -63,7 +61,7 @@ class GameManager:
         }
         
         # 加载卡牌并初始化卡组
-        self._initialize_decks()
+        # self._initialize_decks()
 
 
     def load_cards(self):
