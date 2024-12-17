@@ -1,3 +1,5 @@
+import re
+from turtle import up
 import streamlit as st
 from llm_interaction import LLMInteraction
 from game_manager import GameManager
@@ -65,10 +67,24 @@ def process_user_input(user_input):
                 
                 # 使用卡牌
                 result = st.session_state.game_manager.play_card(selected_card)
-                success_message = f"成功使用卡牌：{selected_card}"
-                update_ui_state(success_message)
+                # success_message = f"成功使用卡牌：{selected_card}"
+                # update_ui_state(success_message)
                 return
     
+        # 如果是攻击的操作，进行攻击
+        elif "攻击" in user_input:
+            game_over = st.session_state.game_manager.perform_attack("player")
+            if game_over:
+                # 如果检查到游戏结束，则直接回合结束
+                st.session_state.game_manager.game_state["player_turn_state"] = "end_turn"
+            return
+
+        # 如果是结束回合的操作，直接结束回合
+        elif "结束" in user_input and "回合" in user_input:
+            st.session_state.game_manager.game_state["player_turn_state"] = "end_turn"
+            return
+
+
     # 如果用户输入不是使用卡牌的操作，则直接更新UI状态
     process_message = user_input
     update_ui_state(process_message)
@@ -214,7 +230,10 @@ def render_game_view():
     st.caption(f"第 {game_state['turn_info']['current_turn']} 回合 - {'我方回合' if game_state['turn_info']['active_player'] == 'player' else '对手回合'}")
     
     # 显示对手状态
-    st.markdown("### 🤖 对手状态")
+    is_opponent_active = game_state["turn_info"]["active_player"] == "opponent"
+    opponent_title_color = "yellow" if is_opponent_active else "white"
+    st.markdown(f"<h3 style='color: {opponent_title_color};'>🤖 对手状态</h3>", unsafe_allow_html=True)
+    
     opponent_stats = game_state.get("opponent_stats", {})
     opponent_deck_count = len(game_state.get("deck_state", {}).get("opponent", {}).get("deck", []))
     opponent_hand = game_state.get("hand_cards", {}).get("opponent", [])
@@ -271,7 +290,10 @@ def render_game_view():
                 """)
     
     # 显示玩家状态
-    st.markdown("### 👤 我方状态")
+    is_player_active = game_state["turn_info"]["active_player"] == "player"
+    player_title_color = "yellow" if is_player_active else "white"
+    st.markdown(f"<h3 style='color: {player_title_color};'>👤 我方状态</h3>", unsafe_allow_html=True)
+    
     player_stats = game_state.get("player_stats", {})
     player_deck_count = len(game_state.get("deck_state", {}).get("player", {}).get("deck", []))
     player_hand = game_state.get("hand_cards", {}).get("player", [])
@@ -339,13 +361,15 @@ def render_chat_view():
         if player_turn_state == "action":
             # 玩家手牌和操作区
             available_cards = st.session_state.game_manager.get_available_cards()
+            # 按费用排序卡牌
+            sorted_cards = sorted(available_cards, key=lambda card: card.get('cost', 0))
             
             # 卡牌选择
             selected_card_name = st.selectbox(
                 "选择卡牌",
-                options=[card['name'] for card in available_cards],
+                options=[card['name'] for card in sorted_cards],
                 format_func=lambda x: next((f"{card['name']} - {card['type']} (费用:{card.get('cost', 0)})" 
-                                      for card in available_cards if card['name'] == x), x),
+                                      for card in sorted_cards if card['name'] == x), x),
                 key="card_select"
             )
             
@@ -354,7 +378,8 @@ def render_chat_view():
             if user_input:
                 add_user_message(user_input)
                 process_user_input_ai(user_input)
-                st.rerun()
+                # st.rerun()
+                update_ui_state(process_message)
             
             # 创建按钮列
             button_cols = st.columns(4)  # 改为4列以容纳攻击按钮
@@ -365,29 +390,53 @@ def render_chat_view():
                     message = f"我使用{selected_card_name}卡牌"
                     add_user_message(message)
                     process_user_input(message)
+                    update_ui_state()
+                    return
                     
             with button_cols[1]:
-                if st.button("⚔️ 攻击", key="attack", use_container_width=True):
-                    game_over = st.session_state.game_manager.perform_attack("player")
-                    if not game_over:
-                        st.session_state.game_manager.game_state["gameloop_state"] = "opponent_turn"
+                # 检查是否已经攻击过和是否是第一回合
+                has_attacked = st.session_state.game_manager.game_state.get("has_attacked_this_turn", False)
+                is_first_turn = st.session_state.game_manager.game_state["turn_info"]["current_turn"] == 1
+                attack_disabled = has_attacked or is_first_turn
+                
+                attack_button_text = "⚔️ 攻击"
+                if has_attacked:
+                    attack_button_text = "⚔️ 已攻击"
+                elif is_first_turn:
+                    attack_button_text = "⚔️ 第一回合禁止攻击"
+                
+                if st.button(attack_button_text, key="attack", use_container_width=True, disabled=attack_disabled):
+                    message = "我要攻击对手"
+                    add_user_message(message)
+                    process_user_input(message)
                     update_ui_state()
+                    return
                     
             with button_cols[2]:
                 if st.button("给出建议", key="get_advice", use_container_width=True):
                     message = f"分析当前局势，并给出使用{selected_card_name}的建议"
                     add_user_message(message)
                     process_user_input(message)
-                    
+                    update_ui_state()
+                    return
+                   
             with button_cols[3]:
                 if st.button("结束回合", key="end_turn", use_container_width=True):
-                    message = "我要束当前回合"
+                    message = "我要结束当前回合"
+                    # st.session_state.game_manager.game_state["player_turn_state"] = "end_turn"
                     add_user_message(message)
-                    st.session_state.game_manager.game_state["player_turn_state"] = "end_turn"
-                    st.session_state.game_manager._process_gameloop_state()
+                    process_user_input(message)
+                    update_ui_state()
+                    # st.session_state.game_manager._process_gameloop_state()
+                    return
             
+            # 特别说明：进入process_user_input() 如果用户输入不是使用卡牌的操作，则直接更新UI状态
+            # process_user_input( user_input )
+            #   process_message = user_input
+            #   update_ui_state(process_message)
+
             # 获取选中卡牌的详细信息并显示在按钮下方
-            selected_card = next((card for card in available_cards if card['name'] == selected_card_name), None)
+            selected_card = next((card for card in sorted_cards if card['name'] == selected_card_name), None)
             if selected_card:
                 with st.container():
                     card_info = (f"🎴 {selected_card['name']} | "
@@ -398,6 +447,7 @@ def render_chat_view():
                                f"效果: {selected_card.get('effect', '无')}")
                     st.text(card_info)
         else:
+            # 非action阶段，直接自动执行状态
             st.session_state.game_manager._process_gameloop_state()
     
     elif gameloop_state == "opponent_turn":
@@ -412,15 +462,19 @@ def render_chat_view():
         gameloop_state != "opponent_turn"):
         
         if gameloop_state == last_state:
-            debug_utils.log("state", "状态重复", {
+            debug_utils.log("state", "！！！状态重复", {
                 "当前状态": gameloop_state,
                 "上次状态": last_state,
                 "玩家回合状态": st.session_state.game_manager.game_state.get("player_turn_state"),
                 "对手回合状态": st.session_state.game_manager.game_state.get("opponent_turn_state")
             })
         else:
+            # 处理状态
+            st.session_state["last_gameloop_state"] = gameloop_state
             st.session_state.game_manager._process_gameloop_state()
-            st.rerun()
+            # 刷新UI + st.rerun()
+            # update_ui_state()
+            # st.rerun()
     
     # 记录当前状态
     st.session_state["last_gameloop_state"] = gameloop_state
