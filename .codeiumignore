@@ -1,3 +1,5 @@
 ./examples
-./simple02
-./simple03
+./examples/simple01
+./examples/simple02
+./examples/simple03
+
