@@ -202,12 +202,8 @@ class GameManager:
                     result = self.play_card(card_name)
                     self.game_state['log'].append(result)
         
-        # 回合结束时恢复能量
+        # 回合结束时，回合数+1，更换玩家
         if self.game_state['turn_info']['phase'] == 'end_turn':
-            self.game_state['player_stats']['energy'] = min(
-                10, 
-                self.game_state['player_stats']['energy'] + 2
-            )
             self.game_state['turn_info']['current_turn'] += 1
             self.game_state['turn_info']['phase'] = 'player_turn'
         
@@ -364,7 +360,7 @@ class GameManager:
         self.game_state["turn_info"]["current_turn"] += 1
         active_player = self.game_state["turn_info"]["active_player"]
         
-        # 重置能量 - 基础能量为3，每回合+1，最大10点
+        # 重置能量规则 - 基础能量为3，每回合+1，最大10点
         base_energy = 3
         turn_bonus = self.game_state["turn_info"]["current_turn"] - 1
         max_energy = min(10, base_energy + turn_bonus)
@@ -485,6 +481,16 @@ class GameManager:
                         f"消耗能量: {card_to_play.get('cost', 0)}, "
                         f"剩余能量: {self.game_state['opponent_stats']['energy']}"
                     )
+                    
+                    # 给玩家一点时间查看卡牌效果
+                    self._ai_thinking("等待卡牌效果结算...", 0.8)
+            
+            # 使用完手牌后，AI决定是否攻击
+            self._ai_thinking("思考是否发起攻击...", 0.5)
+            if self.ai_decide_attack():
+                game_over = self.perform_attack("opponent")
+                if game_over:
+                    return True
             
             self.game_state["opponent_turn_state"] = "end_turn"
             return False
@@ -645,3 +651,47 @@ class GameManager:
         except Exception as e:
             debug_utils.log("game", "获取存档列表失败", {"错误": str(e)})
             return []
+
+    def perform_attack(self, attacker_type):
+        """执行攻击动作
+        
+        Args:
+            attacker_type: 攻击方类型 ("player" 或 "opponent")
+        """
+        # 基础攻击伤害
+        base_damage = 10
+        
+        # 确定攻击方和防守方
+        if attacker_type == "player":
+            attacker = "player_stats"
+            defender = "opponent_stats"
+            message_prefix = "玩家"
+        else:
+            attacker = "opponent_stats"
+            defender = "player_stats"
+            message_prefix = "对手"
+            
+        # 计算实际伤害（考虑护甲减伤）
+        actual_damage = max(0, base_damage - self.game_state[defender]["armor"])
+        
+        # 扣除生命值
+        self.game_state[defender]["hp"] = max(0, self.game_state[defender]["hp"] - actual_damage)
+        
+        # 添加游戏消息
+        self.add_game_message(f"⚔️ {message_prefix}发起攻击，造成{actual_damage}点伤害！")
+        
+        # 检查游戏是否结束
+        if self.game_state[defender]["hp"] <= 0:
+            self.game_state["gameloop_state"] = "end_game"
+            return True
+            
+        return False
+
+    def ai_decide_attack(self):
+        """AI决定是否攻击
+        
+        Returns:
+            bool: 是否执行攻击
+        """
+        # 目前使用随机决策，50%概率攻击
+        return random.random() < 0.5

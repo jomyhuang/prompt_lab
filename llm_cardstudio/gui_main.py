@@ -21,8 +21,8 @@ def update_ui_state(show_success_message=None):
     Args:
         show_success_message (str, optional): 如果提供，显示成功消息
     """
-    if show_success_message:
-        st.success(show_success_message)
+    # if show_success_message:
+    #     st.success(show_success_message)
     st.rerun()
 
 def process_user_input_ai(user_input):
@@ -61,7 +61,7 @@ def process_user_input(user_input):
         if "使用" in user_input and "卡牌" in user_input:
             selected_card = st.session_state.get("card_select")
             if selected_card:
-                debug_utils.log("card", "选中卡牌", selected_card)
+                debug_utils.log("card", "选中使用卡牌", selected_card)
                 
                 # 使用卡牌
                 result = st.session_state.game_manager.play_card(selected_card)
@@ -301,11 +301,11 @@ def render_game_controls(gameloop_state):
     Args:
         gameloop_state: 当前游戏状态
     """
-    col1, col2 = st.columns([1, 4])
-        
-    with col2:
-        # 这里可以添加其他控制按钮
-        pass
+    if gameloop_state == "welcome":
+        if st.button("开始游戏", use_container_width=True):
+            st.session_state.game_manager.start_game()
+            update_ui_state()
+
 
 def render_chat_view():
     """渲染聊天界面"""
@@ -357,7 +357,7 @@ def render_chat_view():
                 st.rerun()
             
             # 创建按钮列
-            button_cols = st.columns(3)
+            button_cols = st.columns(4)  # 改为4列以容纳攻击按钮
             
             # 添加快捷操作钮
             with button_cols[0]:
@@ -367,12 +367,19 @@ def render_chat_view():
                     process_user_input(message)
                     
             with button_cols[1]:
+                if st.button("⚔️ 攻击", key="attack", use_container_width=True):
+                    game_over = st.session_state.game_manager.perform_attack("player")
+                    if not game_over:
+                        st.session_state.game_manager.game_state["gameloop_state"] = "opponent_turn"
+                    update_ui_state()
+                    
+            with button_cols[2]:
                 if st.button("给出建议", key="get_advice", use_container_width=True):
                     message = f"分析当前局势，并给出使用{selected_card_name}的建议"
                     add_user_message(message)
                     process_user_input(message)
                     
-            with button_cols[2]:
+            with button_cols[3]:
                 if st.button("结束回合", key="end_turn", use_container_width=True):
                     message = "我要束当前回合"
                     add_user_message(message)
