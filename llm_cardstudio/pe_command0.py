@@ -90,32 +90,32 @@ class Instruction(BaseModel):
 # 定义完整输出模型
 class CommandOutput(BaseModel):
     card_id: str = Field(..., description="卡牌ID")
-    phase_playcard_instructions: List[Instruction] = Field(..., description="出牌阶段指令列表")
-    phase_playcard_state_updates: Dict[str, Any] = Field(..., description="出牌阶段状态更新")
-    phase_drawcard_instructions: Optional[List[Instruction]] = Field(None, description="抽牌阶段指令列表")
-    phase_drawcard_state_updates: Optional[Dict[str, Any]] = Field(None, description="抽牌阶段状态更新")
-    phase_attack_instructions: Optional[List[Instruction]] = Field(None, description="攻击阶段指令列表")
-    phase_attack_state_updates: Optional[Dict[str, Any]] = Field(None, description="攻击阶段状态更新")
-    phase_defense_instructions: Optional[List[Instruction]] = Field(None, description="防御阶段指令列表")
-    phase_defense_state_updates: Optional[Dict[str, Any]] = Field(None, description="防御阶段状态更新")
-    phase_endturn_instructions: Optional[List[Instruction]] = Field(None, description="回合结束阶段指令列表")
-    phase_endturn_state_updates: Optional[Dict[str, Any]] = Field(None, description="回合结束阶段状态更新")
+    instructions: List[Instruction] = Field(..., description="指令列表")
+    state_updates: Dict[str, Any] = Field(..., description="状态更新")
 
-    @field_validator('phase_playcard_instructions')
-    def validate_playcard_instructions(cls, v):
+    @field_validator('instructions')
+    def validate_instructions(cls, v):
         if not v:
-            raise ValueError('出牌阶段指令列表不能为空')
+            raise ValueError('指令列表不能为空')
+        # 检查序列号是否唯一且连续
         sequences = [inst.sequence for inst in v]
         if len(sequences) != len(set(sequences)):
             raise ValueError('指令序列号必须唯一')
         if sorted(sequences) != list(range(1, len(sequences) + 1)):
-            raise ValueError('指令序列号必须连续')
+            raise ValueError('指令序列号必须连续且从1开始')
         return v
 
-    @field_validator('phase_playcard_state_updates')
-    def validate_playcard_state_updates(cls, v):
-        if not isinstance(v, dict):
-            raise ValueError('状态更新必须是字典类型')
+    @field_validator('state_updates')
+    def validate_state_updates(cls, v):
+        valid_paths = [
+            'player_stats.hp', 'player_stats.energy', 'player_stats.armor',
+            'opponent_stats.hp', 'opponent_stats.energy', 'opponent_stats.armor',
+            'player_stats.spell_damage', 'opponent_stats.spell_damage',
+            'player_stats.card_draw', 'opponent_stats.card_draw'
+        ]
+        for path in v.keys():
+            if path not in valid_paths:
+                raise ValueError(f'无效的状态更新路径: {path}')
         return v
 
 # 定义输出解析器
@@ -124,13 +124,6 @@ output_parser = PydanticOutputParser(pydantic_object=CommandOutput)
 # 定义基础提示模板
 BASE_TEMPLATE = """
 你是一个卡牌游戏指令生成器。你的任务是将卡牌操作转换为游戏系统可执行的指令序列。
-
-游戏阶段说明：
-1. phase:playcard - 出牌阶段（必需）：卡牌从手牌进入场上并触发效果
-2. phase:drawcard - 抽牌阶段（可选）：抽牌时触发的效果
-3. phase:attack - 攻击阶段（可选）：进入战斗/攻击时触发的效果
-4. phase:defense - 防御阶段（可选）：被攻击/防御时触发的效果
-5. phase:endturn - 回合结束阶段（可选）：回合结束时触发的效果
 
 可用的指令类型：
 1. MOVE_CARD: 移动卡牌
@@ -183,10 +176,9 @@ BASE_TEMPLATE = """
 
 规则说明：
 1. 每个指令必须包含 action、parameters、duration 和 sequence
-2. sequence 决定指令执行顺序，在每个阶段内必须连续且从1开始
+2. sequence 决定指令执行顺序
 3. duration 表示执行时长(秒)
-4. state_updates 用于更新游戏状态(如生命值、能量等)
-5. phase:playcard 阶段是必需的，其他阶段根据卡牌效果选择性添加
+4. state_updates 用于更新游戏状态(如生命值、能量等)。使用点符号表示路径, 例如: 'player_stats.hp'
 
 当前游戏状态：
 {game_state}
@@ -203,9 +195,9 @@ BASE_TEMPLATE = """
 注意事项：
 1. 指令序列要完整表达操作流程
 2. 动画时长要合理
-3. 所有数值变化都要反映在对应阶段的state_updates中
+3. 所有数值变化都要反映在state_updates中
 4. 消息要清晰易懂
-5. 严格遵守可用指令类型和游戏阶段
+5. 严格遵守可用指令类型
 """
 
 # 创建提示模板
@@ -259,54 +251,18 @@ class CardCommandGenerator:
         required_stats = ['hp', 'energy', 'armor']
         
         if not all(key in game_state for key in required_keys):
-            raise ValueError("游戏状态缺少必需的键：player_stats 或 opponent_stats")
+            return False
             
         for key in required_keys:
             if not all(stat in game_state[key] for stat in required_stats):
-                raise ValueError(f"游戏状态 {key} 缺少必需的属性：{', '.join(required_stats)}")
+                return False
                 
         return True
 
     def validate_card_data(self, card_data: Dict) -> bool:
         """验证卡牌数据格式"""
         required_keys = ['id', 'name', 'type', 'cost']
-        if not all(key in card_data for key in required_keys):
-            raise ValueError(f"卡牌数据缺少必需的键：{', '.join(required_keys)}")
-        return True
-
-    def validate_phase_instructions(self, instructions: List[Instruction], phase_name: str) -> bool:
-        """验证特定阶段的指令列表"""
-        if not instructions:
-            if phase_name == "phase_playcard":
-                raise ValueError("出牌阶段指令列表不能为空")
-            return True
-            
-        sequences = [inst.sequence for inst in instructions]
-        if len(sequences) != len(set(sequences)):
-            raise ValueError(f"{phase_name} 阶段的指令序列号必须唯一")
-            
-        if sorted(sequences) != list(range(1, len(sequences) + 1)):
-            raise ValueError(f"{phase_name} 阶段的指令序列号必须连续且从1开始")
-            
-        return True
-
-    def validate_phase_state_updates(self, state_updates: Dict[str, Any], phase_name: str) -> bool:
-        """验证特定阶段的状态更新"""
-        if not isinstance(state_updates, dict):
-            raise ValueError(f"{phase_name} 阶段的状态更新必须是字典类型")
-            
-        valid_paths = [
-            'player_stats.hp', 'player_stats.energy', 'player_stats.armor',
-            'opponent_stats.hp', 'opponent_stats.energy', 'opponent_stats.armor',
-            'player_stats.spell_damage', 'opponent_stats.spell_damage',
-            'player_stats.card_draw', 'opponent_stats.card_draw'
-        ]
-        
-        for path in state_updates.keys():
-            if path not in valid_paths:
-                raise ValueError(f"{phase_name} 阶段包含无效的状态更新路径: {path}")
-                
-        return True
+        return all(key in card_data for key in required_keys)
 
 # 使用示例
 def main():
@@ -319,22 +275,14 @@ def main():
         "opponent_stats": {"hp": 30, "energy": 3, "armor": 0}
     }
 
-    # card_data = {
-    #     "id": "card_3",
-    #     "name": "魔法学徒",
-    #     "type": "随从",
-    #     "cost": 5,
-    #     "effect": "提升护甲值+5"
-    # }
-    # player_action = "魔法学徒"
     card_data = {
-        "id": "card_4",
-        "name": "魔法忍者",
+        "id": "card_3",
+        "name": "魔法学徒",
         "type": "随从",
         "cost": 5,
-        "effect": "提升护甲值+5。攻击时，抽一张手牌。防守时，受到伤害时获得1点护甲"
+        "effect": "提升护甲值+5"
     }
-    player_action = "魔法忍者"
+    player_action = "魔法学徒"
     
     try:
         # 验证输入数据
