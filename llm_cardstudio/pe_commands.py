@@ -1,7 +1,7 @@
 from typing import Dict, List, Any, Union
 from langchain.prompts import PromptTemplate
 from langchain.output_parsers import PydanticOutputParser
-from pydantic import BaseModel, Field, validator, field_validator
+from pydantic import BaseModel, Field, validator, field_validator, ValidationError
 from typing import List, Optional
 import json
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -19,6 +19,7 @@ class CardEffect(BaseModel):
 # 定义指令参数模型
 class InstructionParameters(BaseModel):
     card_id: Optional[str] = Field(None, description="卡牌ID")
+    # card_id: Optional[int] = Field(None, description="卡牌ID")
     target_position: Optional[str] = Field(None, description="目标位置")
     source: Optional[str] = Field(None, description="来源位置")
     animation_name: Optional[str] = Field(None, description="动画名称")
@@ -228,11 +229,21 @@ class CardCommandGenerator:
         )
 
     def parse_llm_response(self, llm_response: str) -> CommandOutput:
-        """解析LLM响应"""
+        """解析LLM响应，提供详细的错误信息用于调试"""
         try:
             return self.output_parser.parse(llm_response)
+        except ValidationError as ve:
+            # 格式化验证错误信息
+            error_messages = []
+            for error in ve.errors():
+                location = " -> ".join(str(loc) for loc in error["loc"])
+                error_messages.append(f"位置 {location}: {error['msg']}")
+            raise ValidationError(error_messages, ve.model)
         except Exception as e:
-            raise ValueError(f'解析LLM响应失败: {str(e)}')
+            error_msg = str(e)
+            if "Got:" in error_msg:
+                error_msg = "Got: " + error_msg.split("Got:")[1].strip()
+            raise ValueError(error_msg)
 
     def validate_game_state(self, game_state: Dict) -> bool:
         """验证游戏状态格式"""
@@ -272,25 +283,6 @@ def main():
         "effect": "提升护甲值+5"
     }
     player_action = "魔法学徒"
-
-    # card_data = {
-    #     "id": "card_4",
-    #     "name": "忍者",
-    #     "type": "随从",
-    #     "cost": 2,
-    #     "effect": "进场时摧毁对方一个随从"
-    # }
-    # player_action = "召唤忍者"
-
-    # card_data = {
-    #     "id": "card_5",
-    #     "name": "治疗术",
-    #     "type": "法术",
-    #     "cost": 2,
-    #     "effect": "恢复3点生命值"
-    # }
-    # player_action = "使用治疗术恢复生命值"
- 
     
     try:
         # 验证输入数据
@@ -301,10 +293,8 @@ def main():
             
         # 生成提示词
         prompt = generator.format_prompt(game_state, card_data, player_action)
-        # print("生成的提示词:")
-        # print(prompt)
         
-        # 这里应该调用LLM获取响应
+        # 调用LLM获取响应
         print("\n generator.llm.invoke")
         response = generator.llm.invoke(prompt)
 
@@ -315,12 +305,14 @@ def main():
         parsed_output = generator.parse_llm_response(response.content)
         print("\n解析后的输出:")
         print(parsed_output.model_dump_json(indent=2))
-        
+            
+    except ValidationError as ve:
+        print("数据验证错误:")
+        for error in ve.errors():
+            location = " -> ".join(str(loc) for loc in error["loc"])
+            print(f"- 位置 {location}: {error['msg']}")
     except Exception as e:
         print(f"错误: {str(e)}")
-
-if __name__ == "__main__":
-    main()
 
 # 指令模板示例
 COMMAND_TEMPLATES = {
@@ -435,3 +427,6 @@ COMMAND_TEMPLATES = {
         "sequence": 0
     }
 }
+
+if __name__ == "__main__":
+    main()
