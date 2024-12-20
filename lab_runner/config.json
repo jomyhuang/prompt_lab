@@ -1,0 +1,8 @@
+{
+    "temperature": 0.0,
+    "selected_vendor_name": "GoogleAPI",
+    "selected_models": [
+        "gemini-2.0-flash-exp"
+    ],
+    "selected_prompt_project": "建造系统"
+}

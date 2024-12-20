@@ -7,3 +7,5 @@ venv/
 .idea/
 *.log
 test_logs/
+saves/
+simple01/saves/

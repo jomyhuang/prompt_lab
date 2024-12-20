@@ -1,0 +1,38 @@
+[
+    {
+        "name": "火焰龙",
+        "type": "Monster",
+        "attack": 60,
+        "defense": 30,
+        "health": 90,
+        "effects": [
+            { "type": "伤害", "damage": 20 }
+        ]
+    },
+    {
+        "name": "治疗术",
+        "type": "Spell",
+        "mana_cost": 3,
+         "effects": [
+                 { "type":"治疗", "heal": 10 }
+         ]
+    },
+    {
+      "name": "吸血鬼",
+      "type": "Monster",
+      "attack": 40,
+      "defense": 20,
+        "health": 70,
+     "effects": [
+          { "type": "吸血" }
+       ]
+  },
+  {
+      "name": "陷阱",
+      "type": "Trap",
+      "mana_cost": 2 ,
+      "effects": [
+              {"type": "反伤", "damage": 10}
+      ]
+  }
+]

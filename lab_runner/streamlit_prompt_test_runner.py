@@ -152,6 +152,9 @@ class PromptTestRunner:
         self.detail_log_dir = self.log_dir / "details"
         self.detail_log_dir.mkdir(exist_ok=True)
         
+        # 定义配置文件路径
+        self.config_file = Path(__file__).parent / "config.json"
+        
         # 如果CSV文件不存在，创建并写入表头
         if not self.csv_log_file.exists():
             with open(self.csv_log_file, 'w', newline='', encoding='utf-8') as f:
@@ -182,7 +185,7 @@ class PromptTestRunner:
                 "test_cases": "array_definition_test_cases.md"
             },
         }
-
+    
     def load_prompt(self, prompt_name: str):
         """加载选定的提示词"""
         config = self.prompt_configs[prompt_name]
@@ -267,6 +270,117 @@ class PromptTestRunner:
         
         return test_cases, loaded_cases, errors
 
+    def get_chat_model(self, model_name: str, vendor_config: ModelVendorConfig):
+        """根据模型商配置获取对应的聊天模型实例"""
+        temperature = st.session_state.temperature
+
+        if vendor_config.model_class == "ChatAnthropic":
+            return ChatAnthropic(
+                model=model_name,
+                anthropic_api_key=os.getenv(vendor_config.api_key_env),
+                temperature=temperature,
+                streaming=True
+            )
+        elif vendor_config.model_class == "Ollama":
+            return ChatOllama(
+                model=model_name,
+                base_url=vendor_config.base_url,
+                temperature=temperature,
+                streaming=True
+            )
+        elif vendor_config.model_class == "ChatGoogleGenerativeAI":
+            return ChatGoogleGenerativeAI(
+                model=model_name,
+               api_key=os.getenv(vendor_config.api_key_env),
+                temperature=temperature
+                #,convert_system_message_to_human=True
+            )
+        elif vendor_config.model_class == "LLMStudio":  # 默认使用 ChatOpenAI（包括 LLMStudio，因为它兼容 OpenAI 接口）
+            return ChatOpenAI(
+                model=model_name,
+                temperature=temperature,
+                base_url=vendor_config.base_url
+                #api_key=os.getenv(vendor_config.api_key_env),
+                #streaming=True
+            )
+        else:  # 默认使用 ChatOpenAI（包括 LLMStudio，因为它兼容 OpenAI 接口）
+            return ChatOpenAI(
+                model=model_name,
+                temperature=temperature,
+                base_url=vendor_config.base_url,
+                api_key=os.getenv(vendor_config.api_key_env),
+                streaming=True
+            )
+
+    def _validate_output_format(self, output: Dict[str, Any]):
+        """验证输出格式是否符合规范"""
+        if not isinstance(output, dict):
+            raise ValueError("Output must be a dictionary")
+        
+        required_fields = ["updated_context", "process", "botstatus", "message", "dialogue"]
+        for field in required_fields:
+            if field not in output:
+                raise ValueError(f"Missing required field: {field}")
+
+    def run_test(self, test_case: Dict[str, Any], expected_output: Dict[str, Any], model: str) -> tuple[bool, Dict[str, Any], float, str]:
+        """运行单个测试用例并返回结果、实际输出、执行时间和错误信息"""
+        start_time = time.time()
+        error_msg = ""
+        actual_output = {}
+        
+        try:
+            input_json = json.dumps(test_case, ensure_ascii=False, indent=2)
+            
+            system_content = self.system_prompt.format(
+                input=test_case.get("input", ""),
+                context=json.dumps(test_case.get("context", {}), ensure_ascii=False)
+            )
+            
+            try:
+                # 获取当前选中的模型商配置
+                vendor_config = st.session_state.selected_vendor
+                
+                # 根据模型商配置获取聊天模型实例
+                chat = self.get_chat_model(model, vendor_config)
+                
+                messages = [
+                    SystemMessage(content=system_content),
+                    HumanMessage(content=input_json)
+                ]
+                
+                result = chat.invoke(messages)
+                #print(result.content)
+                #st.sidebar.write(result.content)
+
+                try:
+                    content = result.content
+                    json_start = content.find('{')
+                    json_end = content.rfind('}')
+                    if json_start != -1 and json_end != -1:
+                        content = content[json_start:json_end + 1]
+                    
+                    actual_output = json.loads(content)
+                    self._validate_output_format(actual_output)
+                    
+                    is_match, error_details = self._compare_outputs(actual_output, expected_output)
+                    if is_match:
+                        return True, actual_output, time.time() - start_time, ""
+                    else:
+                        error_msg = "输出与预期不匹配：\n" + "\n".join(error_details)
+                        return False, actual_output, time.time() - start_time, error_msg
+                        
+                except json.JSONDecodeError:
+                    error_msg = "AI响应不是有效的JSON格式"
+                    return False, {}, time.time() - start_time, error_msg
+                    
+            except Exception as e:
+                error_msg = f"API调用错误: {str(e)}"
+                return False, {}, time.time() - start_time, error_msg
+                
+        except Exception as e:
+            error_msg = f"测试执行出错: {str(e)}"
+            return False, {}, time.time() - start_time, error_msg
+
     def _compare_outputs(self, actual: Dict[str, Any], expected: Dict[str, Any]) -> tuple[bool, list]:
         """比较实际输出和预期输出，返回是否匹配和不匹配的详细信息"""
         def compare_dicts(actual_dict: Dict[str, Any], expected_dict: Dict[str, Any], path: str = "") -> tuple[bool, list]:
@@ -316,7 +430,7 @@ class PromptTestRunner:
 
     def get_chat_model(self, model_name: str, vendor_config: ModelVendorConfig):
         """根据模型商配置获取对应的聊天模型实例"""
-        temperature = float(os.getenv("TEMPERATURE", "0.7"))
+        temperature = st.session_state.temperature
 
         if vendor_config.model_class == "ChatAnthropic":
             return ChatAnthropic(
@@ -336,8 +450,8 @@ class PromptTestRunner:
             return ChatGoogleGenerativeAI(
                 model=model_name,
                api_key=os.getenv(vendor_config.api_key_env),
-                temperature=temperature
-                #,convert_system_message_to_human=True
+                temperature=temperature,
+                verbose=True
             )
         elif vendor_config.model_class == "LLMStudio":  # 默认使用 ChatOpenAI（包括 LLMStudio，因为它兼容 OpenAI 接口）
             return ChatOpenAI(
@@ -353,77 +467,9 @@ class PromptTestRunner:
                 temperature=temperature,
                 base_url=vendor_config.base_url,
                 api_key=os.getenv(vendor_config.api_key_env),
-                streaming=True
+                streaming=True,
+                verbose=True
             )
-
-    def run_test(self, test_case: Dict[str, Any], expected_output: Dict[str, Any], model_name: str) -> tuple[bool, Dict[str, Any], float, str]:
-        """运行单个测试用例并返回结果、实际输出、执行时间和错误信息"""
-        start_time = time.time()
-        error_msg = ""
-        actual_output = {}
-        
-        try:
-            input_json = json.dumps(test_case, ensure_ascii=False, indent=2)
-            
-            system_content = self.system_prompt.format(
-                input=test_case.get("input", ""),
-                context=json.dumps(test_case.get("context", {}), ensure_ascii=False)
-            )
-            
-            try:
-                # 获取当前选中的模型商配置
-                vendor_config = st.session_state.selected_vendor
-                
-                # 根据模型商配置获取聊天模型实例
-                chat = self.get_chat_model(model_name, vendor_config)
-                
-                messages = [
-                    SystemMessage(content=system_content),
-                    HumanMessage(content=input_json)
-                ]
-                
-                result = chat.invoke(messages)
-                #print(result.content)
-                st.sidebar.write(result.content)
-
-                try:
-                    content = result.content
-                    json_start = content.find('{')
-                    json_end = content.rfind('}')
-                    if json_start != -1 and json_end != -1:
-                        content = content[json_start:json_end + 1]
-                    
-                    actual_output = json.loads(content)
-                    self._validate_output_format(actual_output)
-                    
-                    is_match, error_details = self._compare_outputs(actual_output, expected_output)
-                    if is_match:
-                        return True, actual_output, time.time() - start_time, ""
-                    else:
-                        error_msg = "输出与预期不匹配：\n" + "\n".join(error_details)
-                        return False, actual_output, time.time() - start_time, error_msg
-                        
-                except json.JSONDecodeError:
-                    error_msg = "AI响应不是有效的JSON格式"
-                    return False, {}, time.time() - start_time, error_msg
-                    
-            except Exception as e:
-                error_msg = f"API调用错误: {str(e)}"
-                return False, {}, time.time() - start_time, error_msg
-                
-        except Exception as e:
-            error_msg = f"测试执行出错: {str(e)}"
-            return False, {}, time.time() - start_time, error_msg
-
-    def _validate_output_format(self, output: Dict[str, Any]):
-        """验证输出格式是否符合规范"""
-        if not isinstance(output, dict):
-            raise ValueError("Output must be a dictionary")
-        
-        required_fields = ["updated_context", "process", "botstatus", "message", "dialogue"]
-        for field in required_fields:
-            if field not in output:
-                raise ValueError(f"Missing required field: {field}")
 
     def save_test_results(self, prompt_system: str, model: str, case_name: str, 
                          result: Dict[str, Any], test_time: str = None):
@@ -464,6 +510,32 @@ class PromptTestRunner:
                 detail_file_name
             ])
 
+def load_config():
+    """加载持久化的配置"""
+    config_file = Path(__file__).parent / "config.json"
+    if config_file.exists():
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                st.session_state.update(config)
+        except Exception as e:
+            logger.error(f"加载配置文件失败: {str(e)}")
+
+def save_config():
+    """保存配置到文件"""
+    config_file = Path(__file__).parent / "config.json"
+    config = {
+        'temperature': st.session_state.temperature,
+        'selected_vendor_name': st.session_state.get('previous_vendor'),
+        'selected_models': st.session_state.get('selected_models', []),
+        'selected_prompt_project': st.session_state.get('prompt_project_selector')
+    }
+    try:
+        with open(config_file, 'w', encoding='utf-8') as f:
+            json.dump(config, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        logger.error(f"保存配置文件失败: {str(e)}")
+
 def main():
     st.set_page_config(
         page_title="Prompt Test Runner",
@@ -473,13 +545,38 @@ def main():
     
     st.title("🧪 Prompt Test Runner")
     
-    # 初始化测试运行器
+    # 初始化测试运行器并加载配置
     if 'runner' not in st.session_state:
         st.session_state.runner = PromptTestRunner()
         st.session_state.test_cases = []
         st.session_state.loaded_cases = []
         st.session_state.errors = []
         st.session_state.results = {}
+        
+        # 加载持久化的配置
+        config_file = Path(__file__).parent / "config.json"
+        if config_file.exists():
+            try:
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    # 设置默认值
+                    st.session_state.temperature = config.get('temperature', 0.7)
+                    st.session_state.previous_vendor = config.get('selected_vendor_name')
+                    st.session_state.selected_models = config.get('selected_models', [])
+                    st.session_state.prompt_project_selector = config.get('selected_prompt_project')
+            except Exception as e:
+                logger.error(f"加载配置文件失败: {str(e)}")
+                # 设置默认值
+                st.session_state.temperature = 0.7
+                st.session_state.previous_vendor = None
+                st.session_state.selected_models = []
+                st.session_state.prompt_project_selector = None
+        else:
+            # 设置默认值
+            st.session_state.temperature = 0.7
+            st.session_state.previous_vendor = None
+            st.session_state.selected_models = []
+            st.session_state.prompt_project_selector = None
         
     # 获取可用的模型商配置
     available_vendors = get_model_configs()
@@ -502,28 +599,61 @@ def main():
     with st.sidebar:
         st.markdown("### 配置")
         
-        # 提示词项目选择
-        selected_prompt_project = st.selectbox(
-            "选择提示词项目",
-            options=list(st.session_state.runner.prompt_configs.keys()),
-            key='prompt_project_selector'
+        # 添加 temperature 调整滑动条
+        temperature = st.slider(
+            "Temperature",
+            min_value=0.0,
+            max_value=2.0,
+            value=st.session_state.temperature,
+            step=0.1,
+            help="调整模型输出的随机性：0表示输出最确定，2表示输出最随机"
         )
         
-        if selected_prompt_project:
-            prompt_config = st.session_state.runner.prompt_configs[selected_prompt_project]
-            st.write(f"当前提示词: {prompt_config['prompt']}")
-            st.write(f"当前测试用例: {prompt_config['test_cases']}")
-            st.session_state.current_prompt_project = selected_prompt_project
+        # 更新temperature值
+        if temperature != st.session_state.temperature:
+            st.session_state.temperature = temperature
+        
+        # 提示词项目选择
+        if 'prompt_project_selector' not in st.session_state:
+            st.session_state.prompt_project_selector = list(st.session_state.runner.prompt_configs.keys())[0]
             
+        prompt_projects = list(st.session_state.runner.prompt_configs.keys())
+        selected_prompt_project = st.selectbox(
+            "选择提示词项目",
+            options=prompt_projects,
+            index=prompt_projects.index(st.session_state.prompt_project_selector)
+        )
+        
+        # 更新 session state
+        st.session_state.prompt_project_selector = selected_prompt_project
+        
+        # 当提示词项目改变时，清空之前的测试用例选择
+        if 'last_selected_project' not in st.session_state:
+            st.session_state.last_selected_project = selected_prompt_project
+        elif st.session_state.last_selected_project != selected_prompt_project:
+            st.session_state.last_selected_project = selected_prompt_project
+            if 'selected_test_cases' in st.session_state:
+                st.session_state.selected_test_cases = []
+            if 'test_cases' in st.session_state:
+                st.session_state.test_cases = None
+            if 'all_selected' in st.session_state:
+                st.session_state.all_selected = False
+        
         st.markdown("---")
         
         # 模型选择
         st.markdown("### 选择模型")
         vendor_names = list(available_vendors.keys())
+        
+        # 使用保存的vendor_name作为默认值
+        default_vendor_index = 0
+        if st.session_state.previous_vendor in vendor_names:
+            default_vendor_index = vendor_names.index(st.session_state.previous_vendor)
+        
         selected_vendor_name = st.selectbox(
             "选择模型商",
             options=vendor_names,
-            key="vendor_selector"
+            index=default_vendor_index
         )
         
         # 获取选中的模型商配置
@@ -531,9 +661,13 @@ def main():
         st.session_state.selected_vendor = selected_vendor
         
         # 当模型商改变时，重置选中的模型列表
-        if ('previous_vendor' not in st.session_state or 
-            st.session_state.previous_vendor != selected_vendor_name):
-            st.session_state.selected_models = [selected_vendor.models[0]]
+        if st.session_state.previous_vendor != selected_vendor_name:
+            # 如果有保存的模型列表且属于当前vendor，使用保存的列表
+            if (len(st.session_state.selected_models) > 0 and 
+                all(model in selected_vendor.models for model in st.session_state.selected_models)):
+                pass
+            else:
+                st.session_state.selected_models = [selected_vendor.models[0]]
             st.session_state.previous_vendor = selected_vendor_name
         
         # 选择基线模型按钮
@@ -546,66 +680,65 @@ def main():
             options=selected_vendor.models,
             default=st.session_state.selected_models
         )
-        # 更新选中的模型
-        st.session_state.selected_models = selected_models
-    
-    # 主界面
-    if st.button("加载提示词和测试用例", key="load_button"):
-        with st.spinner("正在加载..."):
-            # 加载提示词
-            prompt_length = st.session_state.runner.load_prompt(selected_prompt_project)
-            st.success(f"提示词加载完成，长度：{prompt_length}")
-            
-            # 加载测试用例
-            test_file = Path(__file__).parent.parent / st.session_state.runner.prompt_dir / st.session_state.runner.test_cases_filename
-            st.session_state.test_cases, st.session_state.loaded_cases, st.session_state.errors = st.session_state.runner.load_test_cases(str(test_file))
-            
-            if st.session_state.test_cases:
-                st.success(f"成功加载 {len(st.session_state.test_cases)} 个测试用例")
-            if st.session_state.errors:
-                st.error("\n".join(st.session_state.errors))
-    
-    # 主界面
-    if st.session_state.test_cases:
-        col1, col2 = st.columns([1, 1])
         
-        with col1:
-            st.subheader("测试用例")
+        # 更新选择的模型
+        if selected_models != st.session_state.selected_models:
+            st.session_state.selected_models = selected_models
+        
+    # 主界面
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        # 加载提示词和测试用例按钮
+        if st.button("加载提示词和测试用例", key="load_button"):
+            with st.spinner("正在加载..."):
+                # 保存当前配置
+                save_config()
+                
+                # 加载提示词
+                prompt_length = st.session_state.runner.load_prompt(selected_prompt_project)
+                st.success(f"提示词加载完成，长度：{prompt_length}")
+                
+                # 加载测试用例
+                test_file = Path(__file__).parent.parent / st.session_state.runner.prompt_dir / st.session_state.runner.test_cases_filename
+                st.session_state.test_cases, st.session_state.loaded_cases, st.session_state.errors = st.session_state.runner.load_test_cases(str(test_file))
+                
+                if st.session_state.test_cases:
+                    st.success(f"成功加载 {len(st.session_state.test_cases)} 个测试用例")
+                if st.session_state.errors:
+                    st.error("\n".join(st.session_state.errors))
+        
+        # 测试用例选择部分
+        if hasattr(st.session_state, 'test_cases') and st.session_state.test_cases:
+            st.subheader("选择测试用例")
+            # 全选/取消全选按钮
+            if st.button("全选" if not st.session_state.get('all_selected', False) else "取消全选"):
+                st.session_state.all_selected = not st.session_state.get('all_selected', False)
+                if st.session_state.all_selected:
+                    st.session_state.selected_test_cases = [case.name for case in st.session_state.test_cases]
+                else:
+                    st.session_state.selected_test_cases = []
+                st.rerun()
             
-            # 初始化选中的测试用例
-            if 'selected_test_cases' not in st.session_state:
-                st.session_state.selected_test_cases = [st.session_state.test_cases[0].name]
-            
-            # 选择全部按钮
-            if st.button("选择全部用例"):
-                st.session_state.selected_test_cases = [case.name for case in st.session_state.test_cases]
-            
-            # 测试用例多选框
+            # 测试用例多选
             selected_cases = st.multiselect(
                 "选择要运行的测试用例",
                 options=[case.name for case in st.session_state.test_cases],
-                default=st.session_state.selected_test_cases
+                default=st.session_state.get('selected_test_cases', [])
             )
             # 更新选中的测试用例
             st.session_state.selected_test_cases = selected_cases
-        
-        with col2:
-            st.subheader("运行测试")
+    
+    with col2:
+        if hasattr(st.session_state, 'test_cases') and st.session_state.test_cases:
+            st.subheader("已选择的模型")
+            model_list = ", ".join([f"`{model}`" for model in st.session_state.selected_models])
+            st.markdown(f"已选择的模型: {model_list}")
             
-            # 显示已选择的模型列表（单行紧凑显示）
-            if st.session_state.selected_models:
-                model_list = ", ".join([f"`{model}`" for model in st.session_state.selected_models])
-                st.markdown(f"已选择的模型: {model_list}")
-            
-            if st.button("运行测试"):
-                if 'current_prompt_project' not in st.session_state:
-                    st.error("请先选择提示词项目")
-                    return
-                
-                selected_project = st.session_state.current_prompt_project
-                prompt_config = PromptTestRunner().prompt_configs[selected_project]
-                
-                st.session_state.results = {}
+            # 运行测试按钮
+            if st.button("运行测试", key="run_button", disabled=not st.session_state.selected_test_cases):
+                # 保存当前配置
+                save_config()
                 
                 # 对每个选中的模型运行测试
                 test_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -635,142 +768,142 @@ def main():
                             
                             # 保存测试结果
                             st.session_state.runner.save_test_results(
-                                selected_project,
+                                selected_prompt_project,
                                 model,
                                 case_name,
                                 result,
                                 test_time
                             )
                     
-                st.session_state.results[model] = model_results
+                    st.session_state.results[model] = model_results
         
-        # 显示测试结果
-        if st.session_state.results:
-            st.subheader("测试结果")
-            
-            # 为每个模型显示结果
-            for model, model_results in st.session_state.results.items():
-                st.markdown(f"### 模型: {model}")
-                
-                # 计算统计数据
-                total = len(model_results)
-                passed = sum(1 for r in model_results.values() if r["passed"])
-                failed = total - passed
-                pass_rate = (passed/total)*100 if total > 0 else 0
-                total_time = sum(r["execution_time"] for r in model_results.values())
-                avg_time = total_time / total if total > 0 else 0
-                
-                # 显示统计信息
-                cols = st.columns(6)
-                cols[0].metric("总用例数", total)
-                cols[1].metric("通过", passed)
-                cols[2].metric("失败", failed)
-                cols[3].metric("通过率", f"{pass_rate:.1f}%")
-                cols[4].metric("总耗时", f"{total_time:.2f}秒")
-                cols[5].metric("平均耗时", f"{avg_time:.2f}秒")
-                
-                # 显示详细结果
-                for case_name, result in model_results.items():
-                    with st.expander(f"{'✅' if result['passed'] else '❌'} {case_name} ({result['execution_time']:.2f}秒)"):
-                        if result["error"]:
-                            st.error(result["error"])
-                        
-                        col1, col2, col3 = st.columns(3)
-                        
-                        with col1:
-                            st.subheader("输入")
-                            st.json(result["input_data"])
-                        
-                        with col2:
-                            st.subheader("期望输出")
-                            st.json(result["expected_output"])
-                        
-                        with col3:
-                            st.subheader("实际输出")
-                            if result["actual_output"]:
-                                st.json(result["actual_output"])
-                            else:
-                                st.error("无输出")
-
-        # 添加查看历史记录部分
-        st.divider()  # 添加分隔线
-        st.subheader("历史记录查看")
+    # 显示测试结果
+    if st.session_state.results:
+        st.subheader("测试结果")
         
-        if os.path.exists(st.session_state.runner.csv_log_file):
-            # 下载按钮和最近记录显示
-            with open(st.session_state.runner.csv_log_file, 'r', encoding='utf-8') as f:
-                csv_content = f.read()
-            st.download_button(
-                "下载CSV测试记录",
-                csv_content,
-                "test_results.csv",
-                "text/csv",
-                key='download_csv'
-            )
+        # 为每个模型显示结果
+        for model, model_results in st.session_state.results.items():
+            st.markdown(f"### 模型: {model}")
             
-            # 显示最近的测试记录
-            st.subheader("最近的测试记录")
-            df = pd.read_csv(st.session_state.runner.csv_log_file)
-            st.dataframe(df.tail(10))
+            # 计算统计数据
+            total = len(model_results)
+            passed = sum(1 for r in model_results.values() if r["passed"])
+            failed = total - passed
+            pass_rate = (passed/total)*100 if total > 0 else 0
+            total_time = sum(r["execution_time"] for r in model_results.values())
+            avg_time = total_time / total if total > 0 else 0
             
-            # 三栏布局显示详细日志
-            st.subheader("详细日志查看")
-            log_files = list(st.session_state.runner.detail_log_dir.glob("*.json"))
-            if log_files:
-                # 按修改时间排序，最新的在前面
-                log_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
-                
-                # 创建一个更友好的显示格式
-                log_options = {}
-                for f in log_files:
-                    # 获取文件修改时间
-                    mtime = datetime.datetime.fromtimestamp(os.path.getmtime(f))
-                    # 创建显示名称：时间 - 模型 - 测试用例
-                    display_name = f"{mtime.strftime('%Y-%m-%d %H:%M:%S')} - {f.stem}"
-                    log_options[display_name] = f
-                
-                # 上部分：两栏布局显示日志列表和基本信息
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.markdown("#### 日志列表")
-                    selected_log_display = st.selectbox(
-                        "选择要查看的日志",
-                        options=list(log_options.keys()),
-                        key='log_selector_new'
-                    )
-                
-                if selected_log_display:
-                    selected_log_file = log_options[selected_log_display]
-                    with open(selected_log_file, 'r', encoding='utf-8') as f:
-                        log_data = json.load(f)
-                        
+            # 显示统计信息
+            cols = st.columns(6)
+            cols[0].metric("总用例数", total)
+            cols[1].metric("通过", passed)
+            cols[2].metric("失败", failed)
+            cols[3].metric("通过率", f"{pass_rate:.1f}%")
+            cols[4].metric("总耗时", f"{total_time:.2f}秒")
+            cols[5].metric("平均耗时", f"{avg_time:.2f}秒")
+            
+            # 显示详细结果
+            for case_name, result in model_results.items():
+                with st.expander(f"{'✅' if result['passed'] else '❌'} {case_name} ({result['execution_time']:.2f}秒)"):
+                    if result["error"]:
+                        st.error(result["error"])
+                    
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        st.subheader("输入")
+                        st.json(result["input_data"])
+                    
                     with col2:
-                        st.markdown("#### 测试信息")
-                        st.write(f"**测试时间:** {log_data['test_time']}")
-                        st.write(f"**提示词系统:** {log_data['prompt_system']}")
-                        st.write(f"**模型:** {log_data['model']}")
-                        st.write(f"**测试用例:** {log_data['case_name']}")
-                        st.write(f"**执行时间:** {log_data['execution_time']:.2f}秒")
-                        st.write(f"**测试结果:** {'✅ 通过' if log_data['passed'] else '❌ 失败'}")
-                        if log_data['error']:
-                            st.error(f"错误信息:\n{log_data['error']}")
+                        st.subheader("期望输出")
+                        st.json(result["expected_output"])
                     
-                    # 下部分：三栏布局显示数据
-                    st.divider()
-                    data_col1, data_col2, data_col3 = st.columns(3)
+                    with col3:
+                        st.subheader("实际输出")
+                        if result["actual_output"]:
+                            st.json(result["actual_output"])
+                        else:
+                            st.error("无输出")
+
+    # 添加查看历史记录部分
+    st.divider()  # 添加分隔线
+    st.subheader("历史记录查看")
+    
+    if os.path.exists(st.session_state.runner.csv_log_file):
+        # 下载按钮和最近记录显示
+        with open(st.session_state.runner.csv_log_file, 'r', encoding='utf-8') as f:
+            csv_content = f.read()
+        st.download_button(
+            "下载CSV测试记录",
+            csv_content,
+            "test_results.csv",
+            "text/csv",
+            key='download_csv'
+        )
+        
+        # 显示最近的测试记录
+        st.subheader("最近的测试记录")
+        df = pd.read_csv(st.session_state.runner.csv_log_file)
+        st.dataframe(df.tail(10))
+        
+        # 三栏布局显示详细日志
+        st.subheader("详细日志查看")
+        log_files = list(st.session_state.runner.detail_log_dir.glob("*.json"))
+        if log_files:
+            # 按修改时间排序，最新的在前面
+            log_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+            
+            # 创建一个更友好的显示格式
+            log_options = {}
+            for f in log_files:
+                # 获取文件修改时间
+                mtime = datetime.datetime.fromtimestamp(os.path.getmtime(f))
+                # 创建显示名称：时间 - 模型 - 测试用例
+                display_name = f"{mtime.strftime('%Y-%m-%d %H:%M:%S')} - {f.stem}"
+                log_options[display_name] = f
+            
+            # 上部分：两栏布局显示日志列表和基本信息
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("#### 日志列表")
+                selected_log_display = st.selectbox(
+                    "选择要查看的日志",
+                    options=list(log_options.keys()),
+                    key='log_selector_new'
+                )
+            
+            if selected_log_display:
+                selected_log_file = log_options[selected_log_display]
+                with open(selected_log_file, 'r', encoding='utf-8') as f:
+                    log_data = json.load(f)
                     
-                    with data_col1:
-                        st.markdown("#### 输入数据")
-                        st.json(log_data['input_data'])
+                with col2:
+                    st.markdown("#### 测试信息")
+                    st.write(f"**测试时间:** {log_data['test_time']}")
+                    st.write(f"**提示词系统:** {log_data['prompt_system']}")
+                    st.write(f"**模型:** {log_data['model']}")
+                    st.write(f"**测试用例:** {log_data['case_name']}")
+                    st.write(f"**执行时间:** {log_data['execution_time']:.2f}秒")
+                    st.write(f"**测试结果:** {'✅ 通过' if log_data['passed'] else '❌ 失败'}")
+                    if log_data['error']:
+                        st.error(f"错误信息:\n{log_data['error']}")
+                
+                # 下部分：三栏布局显示数据
+                st.divider()
+                data_col1, data_col2, data_col3 = st.columns(3)
+                
+                with data_col1:
+                    st.markdown("#### 输入数据")
+                    st.json(log_data['input_data'])
+                
+                with data_col2:
+                    st.markdown("#### 期望输出")
+                    st.json(log_data['expected_output'])
                     
-                    with data_col2:
-                        st.markdown("#### 期望输出")
-                        st.json(log_data['expected_output'])
-                        
-                    with data_col3:
-                        st.markdown("#### 实际输出")
-                        st.json(log_data['actual_output'])
+                with data_col3:
+                    st.markdown("#### 实际输出")
+                    st.json(log_data['actual_output'])
 
 if __name__ == "__main__":
     main()

@@ -1,2 +1,12 @@
 1. 基于LLM langchain 大模型语言应用开发
 2. 提示词工程文本需要严谨清晰
+3. 基于streamlit构建用户界面,要使用标准化的组件，不要使用css来美化界面
+4. 在没有收到清楚指令的时候，不要任意调整streamlit的GUI界面布局，如果有疑问，请直接询问
+5. 不要任意修改GUI中文本的内容，如果有疑问，请直接询问
+
+参考最新API文件：
+streamlit API
+https://docs.streamlit.io/
+
+langchain api
+https://python.langchain.com/api_reference/
