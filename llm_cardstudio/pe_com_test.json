@@ -1,0 +1,179 @@
+{
+    "test_cases": [
+        {
+            "case_id": "test_001",
+            "description": "测试魔法忍者的护甲效果",
+            "game_state": {
+                "player_stats": {
+                    "hp": 20,
+                    "energy": 3,
+                    "armor": 0
+                },
+                "hand": ["card_4"],
+                "field": [],
+                "deck": ["card_1", "card_2", "card_3"],
+                "discard": []
+            },
+            "card_data": {
+                "card_id": "card_4",
+                "name": "魔法忍者",
+                "type": "minion",
+                "cost": 2,
+                "attack": 2,
+                "health": 3,
+                "effects": "当这张卡被打出时，获得3点护甲值"
+            },
+            "player_action": "打出魔法忍者"
+        },
+        {
+            "case_id": "test_002",
+            "description": "测试治疗术的恢复效果",
+            "game_state": {
+                "player_stats": {
+                    "hp": 15,
+                    "energy": 2,
+                    "armor": 0
+                },
+                "hand": ["card_5"],
+                "field": ["card_1"],
+                "deck": ["card_2", "card_3"],
+                "discard": []
+            },
+            "card_data": {
+                "card_id": "card_5",
+                "name": "治疗术",
+                "type": "spell",
+                "cost": 1,
+                "effects": "当这张卡被打出时，恢复5点生命值"
+            },
+            "player_action": "打出治疗术"
+        },
+        {
+            "case_id": "test_003",
+            "description": "测试铁甲守卫的嘲讽和受伤获得护甲效果",
+            "game_state": {
+                "player_stats": {
+                    "hp": 20,
+                    "energy": 3,
+                    "armor": 0
+                },
+                "hand": ["card_28"],
+                "field": [],
+                "deck": ["card_1", "card_2"],
+                "discard": []
+            },
+            "card_data": {
+                "card_id": "card_28",
+                "name": "铁甲守卫",
+                "type": "minion",
+                "cost": 3,
+                "attack": 2,
+                "health": 5,
+                "effects": "嘲讽。每当这个随从受到伤害时，获得2点护甲值"
+            },
+            "player_action": "打出铁甲守卫"
+        },
+        {
+            "case_id": "test_004",
+            "description": "测试连环闪电的相邻伤害效果",
+            "game_state": {
+                "player_stats": {
+                    "hp": 20,
+                    "energy": 3,
+                    "armor": 0
+                },
+                "hand": ["card_29"],
+                "field": ["card_1", "card_2", "card_3"],
+                "deck": [],
+                "discard": []
+            },
+            "card_data": {
+                "card_id": "card_29",
+                "name": "连环闪电",
+                "type": "spell",
+                "cost": 3,
+                "effects": "对一个随从造成3点伤害，并对其相邻的随从造成2点伤害"
+            },
+            "player_action": "打出连环闪电"
+        },
+        {
+            "case_id": "test_005",
+            "description": "测试生命收割者的战吼效果",
+            "game_state": {
+                "player_stats": {
+                    "hp": 20,
+                    "energy": 6,
+                    "armor": 0
+                },
+                "hand": ["card_30"],
+                "field": ["card_1"],
+                "deck": [],
+                "discard": []
+            },
+            "card_data": {
+                "card_id": "card_30",
+                "name": "生命收割者",
+                "type": "minion",
+                "cost": 6,
+                "attack": 5,
+                "health": 5,
+                "effects": "战吼：对所有敌方随从造成1点伤害。如果有随从死亡，则重复此效果"
+            },
+            "player_action": "打出生命收割者"
+        },
+        {
+            "case_id": "test_006",
+            "description": "测试魔法学徒的法术伤害和抽牌效果",
+            "game_state": {
+                "player_stats": {
+                    "hp": 20,
+                    "energy": 2,
+                    "armor": 0
+                },
+                "hand": ["card_26"],
+                "field": [],
+                "deck": ["card_1", "card_2", "card_3"],
+                "discard": []
+            },
+            "card_data": {
+                "card_id": "card_26",
+                "name": "魔法学徒",
+                "type": "minion",
+                "cost": 2,
+                "attack": 1,
+                "health": 3,
+                "effects": "战吼：造成2点法术伤害，然后抽一张牌。如果目标死亡，则多抽一张牌"
+            },
+            "player_action": "打出魔法学徒"
+        },
+        {
+            "case_id": "test_007",
+            "description": "测试时光倒流的生命值恢复效果",
+            "game_state": {
+                "player_stats": {
+                    "hp": 20,
+                    "energy": 4,
+                    "armor": 0
+                },
+                "hand": ["card_27"],
+                "field": [
+                    {
+                        "id": "card_6",
+                        "current_health": 2,
+                        "max_health": 5
+                    }
+                ],
+                "deck": [],
+                "discard": []
+            },
+            "card_data": {
+                "card_id": "card_27",
+                "name": "时光倒流",
+                "type": "spell",
+                "cost": 4,
+                "effects": "将一个随从的生命值恢复到上个回合开始时的数值"
+            },
+            "player_action": "打出时光倒流"
+        }
+    ]
+}
