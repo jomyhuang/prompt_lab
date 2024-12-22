@@ -449,7 +449,7 @@ class PromptTestRunner:
         elif vendor_config.model_class == "ChatGoogleGenerativeAI":
             return ChatGoogleGenerativeAI(
                 model=model_name,
-               api_key=os.getenv(vendor_config.api_key_env),
+                api_key=os.getenv(vendor_config.api_key_env),
                 temperature=temperature,
                 verbose=True
             )

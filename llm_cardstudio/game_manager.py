@@ -1,9 +1,10 @@
 import json
 import os
 import random
-from re import T
 import time
 import streamlit as st
+from typing import Dict, List, Any, Tuple
+from re import T
 from debug_utils import debug_utils
 
 class GameManager:
@@ -12,6 +13,29 @@ class GameManager:
         self.load_cards()
         self.selected_decks = None
         self._initialize_game_state()
+        
+        # 初始化命令处理器
+        from llm_commands_interaction import CommandProcessor
+        self.commands_processor = CommandProcessor(self)
+
+        # 初始化命令序列状态
+        if 'command_sequence' not in st.session_state:
+            st.session_state.command_sequence = {
+                'commands': [],
+                'current_index': 0,
+                'is_executing': False
+            }
+            
+        # 初始化游戏消息
+        if 'game_messages' not in st.session_state:
+            st.session_state.game_messages = []
+            
+        self.command_sequence = st.session_state.command_sequence
+        self.game_messages = st.session_state.game_messages
+
+    def set_commands_processor(self, processor):
+        """设置命令处理器实例"""
+        self.commands_processor = processor
 
     def _initialize_game_state(self):
         """初始化游戏状态"""
@@ -79,91 +103,79 @@ class GameManager:
         """获取场上的卡牌列表"""
         return self.game_state.get('field_cards', {})
 
-    def play_card(self, card_name, player_type="player"):
+    def play_card(self, card_id: str, player_type: str = "player") -> bool:
         """使用卡牌
+        
         Args:
-            card_name (str): 卡牌名称
-            player_type (str): 玩家类型，可选值："player" 或 "opponent"
+            card_id: 卡牌ID
+            player_type: 玩家类型 ("player" 或 "opponent")
+            
         Returns:
             bool: 是否成功使用卡牌
         """
-        # 获取卡牌信息
-        card = next((card for card in self.game_state["hand_cards"][player_type] if card["name"] == card_name), None)
-        if not card:
-            self.add_game_message("❌ 找不到指定的卡牌")
-            return False
+        try:
+            # 调试日志
+            debug_utils.log("card", "尝试使用卡牌", {
+                "card_id": card_id,
+                "player_type": player_type
+            })
             
-        # 检查能量是否足够
-        card_cost = card.get("cost", 0)
-        current_energy = self.game_state[f"{player_type}_stats"]["energy"]
-        if current_energy < card_cost:
-            self.add_game_message(f"⚡ 能量不足: 需要{card_cost}点能量，当前能量: {current_energy}")
-            return False
+            # 获取手牌
+            hand_cards = self.game_state['hand_cards'][player_type]
             
-        # 扣除能量
-        self.game_state[f"{player_type}_stats"]["energy"] -= card_cost
-        
-        # 从手牌移除并放到场上
-        self.game_state["hand_cards"][player_type].remove(card)
-        self.game_state["field_cards"][player_type].append(card)
-        
-        # 处理卡牌效果
-        # self._process_card_effects(card)
-        
-        # 记录使用卡牌的消息
-        player_symbol = "🎮" if player_type == "player" else "🤖"
-        card_message = [
-            f"{player_symbol} {'我' if player_type == 'player' else '对手'}使用卡牌 **{card['name']}**",
-            f"  - 类型: {card['type']}",
-            f"  - 费用: {card_cost}",
-            f"  - 攻击: {card.get('attack', 0)}",
-            f"  - 生命: {card.get('health', 0)}",
-            f"  - 效果: {card.get('effect', '无')}",
-            f"  - 剩余能量: {self.game_state[f'{player_type}_stats']['energy']}"
-        ]
-        self.add_game_message("\n".join(card_message))
-        
-        debug_utils.log("game", "使用卡牌", {
-            "玩家类型": player_type,
-            "卡牌": card,
-            "剩余能量": self.game_state[f"{player_type}_stats"]["energy"]
-        })
-        
-        return True
-
-    def _process_card_effects(self, card):
-        """处理卡牌效果"""
-        effects = card.get('effects', [])
-        results = []
-        
-        for effect in effects:
-            effect_type = effect.get('type')
-            if effect_type == '伤害':
-                damage = effect.get('damage', 0)
-                self.game_state['log'].append(f"造成{damage}点伤害")
-                results.append(f"造成{damage}点伤害")
-            elif effect_type == '治疗':
-                heal = effect.get('heal', 0)
-                self.game_state['player_stats']['hp'] = min(
-                    100, 
-                    self.game_state['player_stats']['hp'] + heal
-                )
-                self.game_state['log'].append(f"恢复{heal}点生命值")
-                results.append(f"恢复{heal}点生命值")
-            elif effect_type == '吸血':
-                damage = card.get('attack', 0) // 2
-                self.game_state['player_stats']['hp'] = min(
-                    100, 
-                    self.game_state['player_stats']['hp'] + damage
-                )
-                self.game_state['log'].append(f"吸血{damage}点")
-                results.append(f"吸血{damage}点")
-            elif effect_type == '反伤':
-                self.game_state['player_stats']['armor'] += effect.get('damage', 0)
-                self.game_state['log'].append(f"获得{effect.get('damage', 0)}点护甲")
-                results.append(f"获得{effect.get('damage', 0)}点护甲")
-
-        return ", ".join(results)
+            # # 调试日志
+            # debug_utils.log("card", "当前手牌", {
+            #     "hand_cards": [{"id": c.get("id")} for c in hand_cards]
+            # })
+            
+            # 查找卡牌并移动卡牌
+            card = None
+            for i, c in enumerate(hand_cards):
+                if str(c.get('id', '')) == str(card_id):
+                    card = c
+                    break
+                    
+            if not card:
+                print(f"未找到卡牌: {card_id}")
+                debug_utils.log("card", "未找到卡牌", {
+                    "查找ID": card_id,
+                    "可用卡牌": [{"id": c.get("id")} for c in hand_cards]
+                })
+                return False
+                
+            # 检查是否有足够的法力值
+            # think: 检查条件与计算处理放到handle_move_card 或这里?
+            if self.game_state[f'{player_type}_stats']['energy'] < card.get('cost', 0):
+                self.add_game_message("法力值不足")
+                return False
+                
+            # 扣除法力值
+            self.game_state[f'{player_type}_stats']['energy'] -= card.get('cost', 0)
+            
+            # 添加到场上(使用handle_move_card)
+            # self.game_state['hand_cards'][player_type].remove(card)
+            # self.game_state['field_cards'][player_type].append(card)
+            
+            # 调试日志
+            debug_utils.log("card", "成功使用卡牌", {
+                "card": {"id": card.get("id")},
+                "remaining_energy": self.game_state[f'{player_type}_stats']['energy']
+            })
+            
+            # 处理卡牌命令
+            # TODO: 如果没有效果指令集,则无法驱动handle_move_card
+            if self.commands_processor:
+                success = self.commands_processor.process_card_commands(card_id, card, player_type, "phase_playcard")
+                # 出牌阶段
+                if not success:
+                    print(f"处理卡牌命令失败: {card_id}")
+            
+            return True
+            
+        except Exception as e:
+            print(f"使用卡牌失败: {str(e)}")
+            debug_utils.log("card", "使用卡牌出错", {"error": str(e)})
+            return False
 
     def get_game_state(self):
         """获取完整的游戏状态"""
@@ -201,23 +213,6 @@ class GameManager:
             self.game_state["hand_cards"][player_type].remove(card)
             self.deck_state[player_type]["discard_pile"].append(card)
 
-    def update_game_state(self, action_result):
-        """更新游戏状态"""
-        # if isinstance(action_result, dict):
-        #     # 如果是卡牌使用动作
-        #     if action_result.get('action') == 'play_card':
-        #         card_name = action_result.get('parameters', {}).get('card_name')
-        #         if card_name:
-        #             result = self.play_card(card_name)
-        #             self.game_state['log'].append(result)
-        
-        # 回合结束时，回合数+1，更换玩家
-        if self.game_state['turn_info']['phase'] == 'end_turn':
-            self.game_state['turn_info']['current_turn'] += 1
-            self.game_state['turn_info']['phase'] = 'player_turn'
-        
-        return self.game_state
-
     def add_game_message(self, message):
         """添加游戏消息到聊天记录"""
         if "messages" in st.session_state:
@@ -229,76 +224,6 @@ class GameManager:
     def _player_phase_transition(self, duration=0.5):
         """模拟玩家回合阶段切换的过渡效果"""
         time.sleep(duration)
-
-    def _process_gameloop_state(self):
-        """处理游戏主循环状态"""
-        gameloop_state = self.game_state.get("gameloop_state", "welcome")
-        
-        if gameloop_state == "welcome":
-            # 等待玩家按下开始游戏按钮
-            return False
-            
-        elif gameloop_state == "start_game":
-            # 游戏开始初始化
-            self._process_game_start()
-            self.game_state["gameloop_state"] = "deal_cards"
-            st.rerun()
-            return True
-            
-        elif gameloop_state == "deal_cards":
-            # 发牌阶段
-            self._process_deal_cards()
-            self.game_state["gameloop_state"] = "determine_first"
-            st.rerun()
-            return True
-            
-        elif gameloop_state == "determine_first":
-            # 决定首轮玩家
-            self._process_determine_first()
-            self.game_state["gameloop_state"] = "new_turn"
-            st.rerun()
-            return True
-            
-        elif gameloop_state == "new_turn":
-            # 新回合开始
-            self._process_new_turn()
-            if self.game_state["turn_info"]["active_player"] == "player":
-                self.game_state["gameloop_state"] = "player_turn"
-            else:
-                self.game_state["gameloop_state"] = "opponent_turn"
-            st.rerun()
-            return True
-            
-        elif gameloop_state == "player_turn":
-            # 玩家回合
-            if self._process_player_turn():
-                self.game_state["gameloop_state"] = "next_turn"
-                
-            st.rerun()
-            return True
-            
-        elif gameloop_state == "opponent_turn":
-            # 对手回合
-            if self._process_opponent_turn():
-                self.game_state["gameloop_state"] = "next_turn"
-            st.rerun()
-            return True
-            
-        elif gameloop_state == "next_turn":
-            # 进入下一回合
-            self._process_next_turn()
-            self.game_state["gameloop_state"] = "new_turn"
-            st.rerun()
-            return True
-            
-        elif gameloop_state == "end_game":
-            # 游戏结束
-            self._process_end_game()
-            self.game_state["gameloop_state"] = "welcome"
-            st.rerun()
-            return True
-            
-        return False
 
     def _process_game_start(self):
         """处理游戏开始阶段"""
@@ -414,103 +339,6 @@ class GameManager:
         """开始新游戏"""
         self.game_state["gameloop_state"] = "start_game"
         self._process_gameloop_state()
-
-    def _process_player_turn(self):
-        """处理玩家回合
-        Returns:
-            bool: 如果回合结束返回True，否则返回False
-        """
-        # 获取当前玩家回合状态
-        player_turn_state = self.game_state.get("player_turn_state", "start")
-        
-        if player_turn_state == "start":
-            # 回合开始阶段
-            self.add_game_message("🎮 **你的回合开始了！**")
-            self.game_state["player_turn_state"] = "draw_card"
-            return False
-            
-        elif player_turn_state == "draw_card":
-            # 抽牌阶段
-            self.add_game_message("🎴 **抽取一张卡牌**")
-            self.draw_card("player")
-            self.game_state["player_turn_state"] = "action"
-            return False
-            
-        elif player_turn_state == "action":
-            # 玩家行动阶段
-            # 等待玩家操作，由界面控制
-            return False
-            
-        elif player_turn_state == "end_turn":
-            # 回合结束阶段
-            self.add_game_message("🔄 **你的回合结束了**")
-            self.game_state["player_turn_state"] = "start"
-            return True
-            
-        return False
-
-    def _process_opponent_turn(self):
-        """处理对手回合"""
-        opponent_turn_state = self.game_state.get("opponent_turn_state", "start")
-        
-        if opponent_turn_state == "start":
-            # 回合开始阶段
-            self.add_game_message("🤖 **对手回合开始...**")
-            self._ai_thinking("正在分析局势...")
-            self.game_state["opponent_turn_state"] = "draw_card"
-            return False
-            
-        elif opponent_turn_state == "draw_card":
-            # 抽牌阶段
-            self.add_game_message("🎴 **对手抽取了一张卡牌**")
-            self.draw_card("opponent")
-            # self._ai_thinking("思考要使用哪张卡牌...")
-            self.game_state["opponent_turn_state"] = "action"
-            return False
-            
-        elif opponent_turn_state == "action":
-            # AI行动阶段
-            self._ai_thinking("正在计算最佳行动...")
-            
-            if self.ai_decide_playcard():
-                # 对手简单AI：随机打一张手牌
-                opponent_hand = self.game_state["hand_cards"]["opponent"]
-                if opponent_hand:
-                    # 筛选能量足够的卡牌
-                    playable_cards = [
-                        card for card in opponent_hand 
-                        if card.get("cost", 0) <= self.game_state["opponent_stats"]["energy"]
-                    ]
-                    
-                    if playable_cards:
-                        card_to_play = random.choice(playable_cards)
-                        # 使用卡牌
-                        self.play_card(card_to_play["name"], "opponent")
-                        
-            self.game_state["opponent_turn_state"] = "action_2"
-            return False
-
-        elif opponent_turn_state == "action_2":
-            
-            # 使用完手牌后，AI决定是否攻击
-            self._ai_thinking("思考是否发起攻击...", 0.5)
-            if self.ai_decide_attack():
-                game_over = self.perform_attack("opponent")
-                if game_over:
-                    return True
-            
-            self.game_state["opponent_turn_state"] = "end_turn"
-            return False
-            
-        elif opponent_turn_state == "end_turn":
-            # 回合结束阶段
-            self._ai_thinking("回合结束...")
-            self.add_game_message("🔄 **对手回合结束**")
-            self.game_state["opponent_turn_state"] = "start"
-            self.game_state["gameloop_state"] = "next_turn"
-            return True
-            
-        return False
 
     def _ai_thinking(self, message, duration=0.5):
         """模拟AI思考过程
@@ -738,3 +566,217 @@ class GameManager:
     #     if max_energy > 10:
     #         max_energy = 10
     #     self.game_state[f"{active_player}_stats"]["energy"] = max_energy
+
+    def _process_gameloop_state(self):
+        """处理游戏主循环状态"""
+        gameloop_state = self.game_state.get("gameloop_state", "welcome")
+        
+        if gameloop_state == "welcome":
+            # 等待玩家按下开始游戏按钮
+            return False
+            
+        elif gameloop_state == "start_game":
+            # 游戏开始初始化
+            self._process_game_start()
+            self.game_state["gameloop_state"] = "deal_cards"
+            st.rerun()
+            return True
+            
+        elif gameloop_state == "deal_cards":
+            # 发牌阶段
+            self._process_deal_cards()
+            self.game_state["gameloop_state"] = "determine_first"
+            st.rerun()
+            return True
+            
+        elif gameloop_state == "determine_first":
+            # 决定首轮玩家
+            self._process_determine_first()
+            self.game_state["gameloop_state"] = "new_turn"
+            st.rerun()
+            return True
+            
+        elif gameloop_state == "new_turn":
+            # 新回合开始
+            self._process_new_turn()
+            if self.game_state["turn_info"]["active_player"] == "player":
+                self.game_state["gameloop_state"] = "player_turn"
+            else:
+                self.game_state["gameloop_state"] = "opponent_turn"
+            st.rerun()
+            return True
+            
+        elif gameloop_state == "player_turn":
+            # 玩家回合
+            if self._process_player_turn():
+                self.game_state["gameloop_state"] = "next_turn"
+                
+            st.rerun()
+            return True
+            
+        elif gameloop_state == "opponent_turn":
+            # 对手回合
+            if self._process_opponent_turn():
+                self.game_state["gameloop_state"] = "next_turn"
+            st.rerun()
+            return True
+            
+        elif gameloop_state == "next_turn":
+            # 进入下一回合
+            self._process_next_turn()
+            self.game_state["gameloop_state"] = "new_turn"
+            st.rerun()
+            return True
+            
+        elif gameloop_state == "end_game":
+            # 游戏结束
+            self._process_end_game()
+            self.game_state["gameloop_state"] = "welcome"
+            st.rerun()
+            return True
+            
+        return False
+
+    def _process_player_turn(self):
+        """处理玩家回合
+        Returns:
+            bool: 如果回合结束返回True，否则返回False
+        """
+        # 获取当前玩家回合状态
+        player_turn_state = self.game_state.get("player_turn_state", "start")
+        
+        if player_turn_state == "start":
+            # 回合开始阶段
+            self.add_game_message("🎮 **你的回合开始了！**")
+            self.game_state["player_turn_state"] = "draw_card"
+            return False
+            
+        elif player_turn_state == "draw_card":
+            # 抽牌阶段
+            self.add_game_message("🎴 **抽取一张卡牌**")
+            self.draw_card("player")
+            self.game_state["player_turn_state"] = "action"
+            return False
+            
+        elif player_turn_state == "action":
+            # 玩家行动阶段
+            # 等待玩家操作，由界面控制
+            return False
+            
+        elif player_turn_state == "end_turn":
+            # 回合结束阶段
+            self.add_game_message("🔄 **你的回合结束了**")
+            self.game_state["player_turn_state"] = "start"
+            return True
+            
+        return False
+
+    def _process_opponent_turn(self):
+        """处理对手回合"""
+        opponent_turn_state = self.game_state.get("opponent_turn_state", "start")
+        
+        if opponent_turn_state == "start":
+            # 回合开始阶段
+            self.add_game_message("🤖 **对手回合开始...**")
+            self._ai_thinking("正在分析局势...")
+            self.game_state["opponent_turn_state"] = "draw_card"
+            return False
+            
+        elif opponent_turn_state == "draw_card":
+            # 抽牌阶段
+            self.add_game_message("🎴 **对手抽取了一张卡牌**")
+            self.draw_card("opponent")
+            # self._ai_thinking("思考要使用哪张卡牌...")
+            self.game_state["opponent_turn_state"] = "action"
+            return False
+            
+        elif opponent_turn_state == "action":
+            # AI行动阶段
+            self._ai_thinking("正在计算最佳行动...")
+            
+            if self.ai_decide_playcard():
+                # 对手简单AI：随机打一张手牌
+                opponent_hand = self.game_state["hand_cards"]["opponent"]
+                if opponent_hand:
+                    # 筛选能量足够的卡牌
+                    playable_cards = [
+                        card for card in opponent_hand 
+                        if card.get("cost", 0) <= self.game_state["opponent_stats"]["energy"]
+                    ]
+                    
+                    if playable_cards:
+                        card_to_play = random.choice(playable_cards)
+                        # 使用卡牌
+                        self.play_card(card_to_play["id"], "opponent")
+                        
+            self.game_state["opponent_turn_state"] = "action_2"
+            return False
+
+        elif opponent_turn_state == "action_2":
+            
+            # 使用完手牌后，AI决定是否攻击
+            self._ai_thinking("思考是否发起攻击...", 0.5)
+            if self.ai_decide_attack():
+                game_over = self.perform_attack("opponent")
+                if game_over:
+                    return True
+            
+            self.game_state["opponent_turn_state"] = "end_turn"
+            return False
+            
+        elif opponent_turn_state == "end_turn":
+            # 回合结束阶段
+            self._ai_thinking("回合结束...")
+            self.add_game_message("🔄 **对手回合结束**")
+            self.game_state["opponent_turn_state"] = "start"
+            self.game_state["gameloop_state"] = "next_turn"
+            return True
+            
+        return False
+
+    def start_command_sequence(self, commands: List[Dict]):
+        """开始执行命令序列"""
+        self.command_sequence['commands'] = commands
+        self.command_sequence['current_index'] = 0
+        self.command_sequence['is_executing'] = True
+        print(f"开始执行命令序列，共 {len(commands)} 个命令")
+        
+    def process_next_command(self) -> bool:
+        """处理序列中的下一个命令"""
+        if not self.command_sequence['is_executing']:
+            return False
+            
+        commands = self.command_sequence['commands']
+        current_index = self.command_sequence['current_index']
+        
+        if current_index >= len(commands):
+            self.add_game_message("命令序列执行完成")
+            print("命令序列执行完成")
+            self.command_sequence['is_executing'] = False
+            self.command_sequence['current_index'] = 0
+            return False
+            
+        command = commands[current_index]
+        print(f"执行命令 {current_index + 1}/{len(commands)}: {command['action']}")
+        
+        # 执行命令
+        success = self.commands_processor.process_single_command(command)
+        
+        if success:
+            self.command_sequence['current_index'] += 1
+            self.add_game_message(f"✅ 命令执行成功: {command['action']}")
+        else:
+            self.add_game_message(f"❌ 命令执行失败: {command['action']}")
+            self.command_sequence['is_executing'] = False
+            
+        return success
+        
+    def is_executing_commands(self) -> bool:
+        """检查是否正在执行命令序列"""
+        return self.command_sequence['is_executing']
+        
+    def get_current_command_progress(self) -> Tuple[int, int]:
+        """获取当前命令执行进度"""
+        total = len(self.command_sequence['commands'])
+        current = self.command_sequence['current_index']
+        return current, total

@@ -9,6 +9,7 @@ import os
 import json
 import time
 from datetime import datetime
+from typing import List, Dict
 
 # 初始化全局session state
 if 'initialized' not in st.session_state:
@@ -17,6 +18,8 @@ if 'initialized' not in st.session_state:
     st.session_state.player_manager = PlayerManager()
     st.session_state.messages = [{"role": "assistant", "content": "准备好战斗了吗？"}]
     st.session_state.initialized = True
+    st.session_state.ai_input = ""
+
 
 def update_ui_state(show_success_message=None):
     """更新界面状态
@@ -27,71 +30,111 @@ def update_ui_state(show_success_message=None):
     #     st.success(show_success_message)
     st.rerun()
 
-def process_user_input_ai(user_input):
+# def render_command_progress():
+#     """渲染命令执行进度"""
+#     if st.session_state.game_manager.is_executing_commands():
+
+#         return True
+    
+#     return False
+
+def process_game_loop():
+    """处理游戏循环"""
+    game_manager = st.session_state.game_manager
+    require_update = False
+    
+    # 检查是否有命令正在执行
+    if game_manager.is_executing_commands():
+        current, total = st.session_state.game_manager.get_current_command_progress()
+        progress_text = f"执行命令 {current}/{total}"
+        st.progress(current / total, text=progress_text)
+        # 执行下一个命令
+        success = game_manager.process_next_command()
+        require_update = True
+        # update_ui_state()
+    
+    # 检查是否有LLM响应
+    if st.session_state.ai_input:
+        process_user_input_ai(st.session_state.ai_input)
+        st.session_state.ai_input = ""
+        require_update = True
+
+    # if game_manager.check_game_over():
+    #     st.session_state.game_over = True
+    
+    return require_update
+
+def process_user_input_ai(message):
     """AI处理用户输入"""
     # 获取当前游戏状态
     game_state = st.session_state.game_manager.get_game_state()
     
     # 记录调试信息
     debug_utils.log("llm", "处理用户输入", {
-        "用户输入": user_input,
-        "游戏状态": game_state
+        "用户输入": message
+        # "游戏状态": game_state
     })
     
-    # 在右上角显示运行状态
+    # 显示运行状态
     status_container = st.container()
     with status_container:
-        with st.status("AI思考中...", expanded=False) as status:
+        with st.status("AI思考中...", state="running", expanded=False) as status:
             # 生成AI响应
-            ai_response = st.session_state.llm_interaction.generate_ai_response(user_input, game_state)
+            ai_response = st.session_state.llm_interaction.generate_ai_response(message, game_state)
             status.update(label="完成", state="complete")
     
+    # print(ai_response)
     # 添加AI响应到消息历史
-    st.session_state.messages.append({"role": "assistant", "content": ai_response})
+    st.session_state.messages.append({"role": "assistant", "content": ai_response.content})
     
     # 记录调试信息
-    debug_utils.log("llm", "AI响应", {"响应内容": ai_response})
-    st.rerun()
+    debug_utils.log("llm", "AI响应", {"响应内容": ai_response.content})
+    # st.rerun()
+    # update_ui_state()
 
 def process_user_input(user_input):
     """处理用户输入"""
     with st.spinner("处理中..."):
+
+        add_user_message(user_input)
         # 解析用户输入
         action_result = st.session_state.llm_interaction.parse_user_action(user_input)
         
         # 如果是使用卡牌的操作，将卡牌从手牌移到场上
         if "使用" in user_input and "卡牌" in user_input:
-            selected_card = st.session_state.get("card_select")
-            if selected_card:
-                debug_utils.log("card", "选中使用卡牌", selected_card)
+            selected_card_id = st.session_state.get("card_select")
+            if selected_card_id:
+                debug_utils.log("card", "选中使用卡牌", {
+                    "selected_card_id": selected_card_id
+                })
                 
-                # 使用卡牌
-                result = st.session_state.game_manager.play_card(selected_card)
-                # success_message = f"成功使用卡牌：{selected_card}"
-                # update_ui_state(success_message)
+                # 使用卡牌（会自动处理命令）
+                result = st.session_state.game_manager.play_card(str(selected_card_id))
                 return
     
         # 如果是攻击的操作，进行攻击
         elif "攻击" in user_input:
+            # 进行攻击
             game_over = st.session_state.game_manager.perform_attack("player")
             if game_over:
                 # 如果检查到游戏结束，则直接回合结束
                 st.session_state.game_manager.game_state["player_turn_state"] = "end_turn"
             return
-
+    
         # 如果是结束回合的操作，直接结束回合
         elif "结束" in user_input and "回合" in user_input:
             st.session_state.game_manager.game_state["player_turn_state"] = "end_turn"
             return
 
-
     # 如果用户输入不是使用卡牌的操作，则直接更新UI状态
-    process_message = user_input
-    update_ui_state(process_message)
-
+    # process_message = user_input
+    # update_ui_state()
 
 def render_game_view():
     """渲染游戏画面"""
+    # process_game_loop()
+    # render_command_progress()
+    
     st.header("🎮 卡牌战场", divider="rainbow")
     
     # 获取游戏状态
@@ -253,7 +296,7 @@ def render_game_view():
     with col5:
         st.caption("手牌")
         st.markdown(f"✋ {len(opponent_hand)}")
-    
+
     # 对手场上卡牌
     st.markdown("#### 🎯 对手场上卡牌")
     opponent_field_cards = game_state.get("field_cards", {}).get("opponent", [])
@@ -343,15 +386,23 @@ def render_chat_view():
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
-    
+
+    # render command progress 渲染命令执行进度
+    # render AI in progress 渲染AI执行进度
+    if process_game_loop():
+        # 如果有进行渲染, 则更新画面
+        update_ui_state()
+        return
+
     # 在欢迎界面和玩家回合的action阶段显示交互界面
     if gameloop_state == "welcome":
         # 欢迎界面对话
         user_input = st.chat_input("你可以问我任何关于游戏的问题...", key="welcome_chat_input")
         if user_input:
-            add_user_message(user_input)
-            process_user_input_ai(user_input)
-            
+            add_user_input_ai(user_input)
+            update_ui_state()
+            return
+    
     elif gameloop_state == "player_turn":
         # 玩家回合界面
         st.markdown("### 🎮 你的回合")
@@ -365,30 +416,33 @@ def render_chat_view():
             sorted_cards = sorted(available_cards, key=lambda card: card.get('cost', 0))
             
             # 卡牌选择
-            selected_card_name = st.selectbox(
+            selected_card_id = st.selectbox(
                 "选择卡牌",
-                options=[card['name'] for card in sorted_cards],
+                options=[str(card['id']) for card in sorted_cards],
                 format_func=lambda x: next((f"{card['name']} - {card['type']} (费用:{card.get('cost', 0)})" 
-                                      for card in sorted_cards if card['name'] == x), x),
+                                      for card in sorted_cards if str(card['id']) == x), x),
                 key="card_select"
             )
             
             # 用户输入区域
             user_input = st.chat_input("输入你的行动或问题...", key="chat_input")
             if user_input:
-                add_user_message(user_input)
-                process_user_input_ai(user_input)
-                # st.rerun()
-                update_ui_state(process_message)
-            
+                # add_user_message(user_input)
+                # process_user_input_ai(user_input)
+                add_user_input_ai(user_input)
+                update_ui_state()
+                return
+
             # 创建按钮列
             button_cols = st.columns(4)  # 改为4列以容纳攻击按钮
             
             # 添加快捷操作钮
             with button_cols[0]:
                 if st.button("使用卡牌", key="use_card", use_container_width=True):
-                    message = f"我使用{selected_card_name}卡牌"
-                    add_user_message(message)
+                    card = next((card for card in sorted_cards if str(card['id']) == selected_card_id), None)
+                    if card:
+                        message = f"我使用{card['name']}卡牌"
+                    # add_user_message(message)
                     process_user_input(message)
                     update_ui_state()
                     return
@@ -407,16 +461,19 @@ def render_chat_view():
                 
                 if st.button(attack_button_text, key="attack", use_container_width=True, disabled=attack_disabled):
                     message = "我要攻击对手"
-                    add_user_message(message)
+                    # add_user_message(message)
                     process_user_input(message)
                     update_ui_state()
                     return
                     
             with button_cols[2]:
                 if st.button("给出建议", key="get_advice", use_container_width=True):
-                    message = f"分析当前局势，并给出使用{selected_card_name}的建议"
-                    add_user_message(message)
-                    process_user_input(message)
+                    card = next((card for card in sorted_cards if str(card['id']) == selected_card_id), None)
+                    if card:
+                        message = f"分析当前局势，并给出使用{card['name']}的建议"
+                    # add_user_message(message)
+                    # process_user_input_ai(message)
+                    add_user_input_ai(message)
                     update_ui_state()
                     return
                    
@@ -424,7 +481,7 @@ def render_chat_view():
                 if st.button("结束回合", key="end_turn", use_container_width=True):
                     message = "我要结束当前回合"
                     # st.session_state.game_manager.game_state["player_turn_state"] = "end_turn"
-                    add_user_message(message)
+                    # add_user_message(message)
                     process_user_input(message)
                     update_ui_state()
                     # st.session_state.game_manager._process_gameloop_state()
@@ -433,10 +490,10 @@ def render_chat_view():
             # 特别说明：进入process_user_input() 如果用户输入不是使用卡牌的操作，则直接更新UI状态
             # process_user_input( user_input )
             #   process_message = user_input
-            #   update_ui_state(process_message)
+            #   update_ui_state()
 
             # 获取选中卡牌的详细信息并显示在按钮下方
-            selected_card = next((card for card in sorted_cards if card['name'] == selected_card_name), None)
+            selected_card = next((card for card in sorted_cards if str(card['id']) == selected_card_id), None)
             if selected_card:
                 with st.container():
                     card_info = (f"🎴 {selected_card['name']} | "
@@ -486,6 +543,12 @@ def add_user_message(message):
 def add_assistant_message(message):
     """添加助手消息"""
     st.session_state.messages.append({"role": "assistant", "content": message})
+
+def add_user_input_ai(message):
+    """添加用户输入AI"""
+    add_user_message(message)
+    st.session_state.ai_input = message
+
 
 def main():
     """主函数"""

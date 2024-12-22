@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_ollama import ChatOllama
+from langchain_google_genai import ChatGoogleGenerativeAI
+
 
 # 确保加载环境变量
 load_dotenv()
@@ -36,13 +38,21 @@ CARD_TEST_MODELS = {
         base_url=None,
         model_class="ChatGoogleGenerativeAI"
     ),
+    "Ollama": ModelVendorConfig(
+        name="Ollama",
+        models=["qwen2.5-coder:7b", "llama3.3", "mistral", "mixtral", "codellama", "qwen", "yi"],
+        baseline_models=["llama3.3"],
+        api_key_env=None,  # Ollama 不需要 API key
+        base_url="http://localhost:11434",  # 默认的 Ollama 地址
+        model_class="Ollama"
+    ),
     "LLMStudio": ModelVendorConfig(
         name="LLMStudio",
-        models=["qwen2.5-coder-32b-instruct"],
-        baseline_models=["qwen2.5-coder-32b-instruct"],
-        api_key_env="API_KEY",
-        base_url="http://localhost:1234/v1",
-        model_class="ChatOpenAI"
+        models=["qwen2.5-coder-32b-instruct","llama-3.2-1b-instruct-q8_0","QwQ-32B-Preview-GGUF"],  # LLMStudio 作为本地服务
+        baseline_models=["llama-3.2-1b-instruct-q8_0"],
+        api_key_env=None,
+        base_url="http://localhost:1234/v1",  # 默认的 LLMStudio 地址
+        model_class="LLMStudio"  # LLMStudio 兼容 OpenAI 接口
     )
 }
 
@@ -101,35 +111,61 @@ def create_model_instance(vendor_name: str, model_name: str):
     """创建模型实例"""
     config = CARD_TEST_MODELS.get(vendor_name)
     if not config:
-        raise ValueError(f"未找到供应商配置: {vendor_name}")
-        
-    if model_name not in config.models:
-        raise ValueError(f"模型 {model_name} 不在供应商 {vendor_name} 的模型列表中")
-    
-    api_key = os.getenv(config.api_key_env)
-    if not api_key:
-        raise ValueError(f"供应商 {vendor_name} 的API密钥未配置")
-    
+        raise ValueError(f"未知的供应商: {vendor_name}")
+
+    # 检查API密钥（如果需要的话）
+    api_key = None
+    if config.api_key_env:
+        api_key = os.getenv(config.api_key_env)
+        if not api_key:
+            raise ValueError(f"供应商 {vendor_name} 的API密钥未配置")
+
     print(f"正在创建模型实例: {vendor_name}/{model_name}")
     print(f"使用API基础URL: {config.base_url}")
     
+    if api_key:
+        print(f"使用API密钥: {api_key}")
+    else:
+        print("该模型不需要API密钥")
+
+    temperature = 0.0
+
     # 根据模型类型创建实例
-    if config.model_class == "ChatOpenAI":
-        from langchain_openai import ChatOpenAI
-        return ChatOpenAI(
+    if config.model_class == "ChatAnthropic":
+        return ChatAnthropic(
             model=model_name,
-            openai_api_key=api_key,
-            openai_api_base=config.base_url,
-            temperature=0,
-            streaming=True
+            anthropic_api_key=api_key,
+            temperature=temperature
+            # streaming=True
+        )
+    elif config.model_class == "Ollama":
+        return ChatOllama(
+            model=model_name,
+            base_url=config.base_url,
+            temperature=temperature
+            # streaming=True
         )
     elif config.model_class == "ChatGoogleGenerativeAI":
-        from langchain_google_genai import ChatGoogleGenerativeAI
         return ChatGoogleGenerativeAI(
             model=model_name,
-            google_api_key=api_key,
-            temperature=0,
+            api_key=api_key,
+            temperature=temperature,
             streaming=True
         )
+    elif config.model_class == "LLMStudio":
+        # LLMStudio 使用 OpenAI 兼容接口，但不需要 API key
+        return ChatOpenAI(
+            model=model_name,
+            api_key="dummy-key",  # LLMStudio 需要一个占位符 API key
+            base_url=config.base_url,
+            temperature=temperature
+            # streaming=True
+        )
     else:
-        raise ValueError(f"不支持的模型类型: {config.model_class}")
+        return ChatOpenAI(
+            model=model_name,
+            api_key=api_key,
+            base_url=config.base_url,
+            temperature=temperature,
+            streaming=True
+        )

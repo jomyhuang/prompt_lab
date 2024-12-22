@@ -1,5 +1,6 @@
 # 忽略所有测试文件夹
-
+saves/
+saves_com/
 
 # 忽略所有缓存文件夹
 __pycache__/
@@ -14,6 +15,9 @@ env/
 
 # 忽略特定文件夹
 ./examples/
+./examples/simple01/
+./examples/simple02/
+./examples/simple03/
 
 
 

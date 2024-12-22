@@ -734,6 +734,10 @@ def run_single_test(generator: CardCommandGenerator, test_case: dict):
         generator: 命令生成器实例
         test_case: 测试用例数据
     """
+    import time
+    
+    start_time = time.time()
+    
     print(f"\n执行测试用例: {test_case['case_id']}")
     print(f"描述: {test_case['description']}")
     print(f"动作: {test_case['player_action']}")
@@ -747,7 +751,6 @@ def run_single_test(generator: CardCommandGenerator, test_case: dict):
         )
         
         # 调用LLM获取响应
-
         print("generator.llm.invoke")
         print(f"正在使用模型: {generator.vendor_name}/{generator.model_name}")
         llm_response = generator.llm.invoke(prompt).content
@@ -765,13 +768,22 @@ def run_single_test(generator: CardCommandGenerator, test_case: dict):
                     "player_action": test_case["player_action"]
                 }
             )
+            end_time = time.time()
+            execution_time = end_time - start_time
             print(f"✓ 测试成功: {test_case['case_id']}")
+            print(f"执行时间: {execution_time:.2f} 秒")
         except Exception as e:
+            end_time = time.time()
+            execution_time = end_time - start_time
             print(f"✗ 测试失败: {test_case['case_id']}")
             print(f"错误信息: {str(e)}")
+            print(f"执行时间: {execution_time:.2f} 秒")
             
     except Exception as e:
+        end_time = time.time()
+        execution_time = end_time - start_time
         print(f"✗ 测试执行错误: {str(e)}")
+        print(f"执行时间: {execution_time:.2f} 秒")
 
 if __name__ == "__main__":
     run_command_tests()
