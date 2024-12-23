@@ -10,3 +10,10 @@ https://docs.streamlit.io/
 
 langchain api
 https://python.langchain.com/api_reference/
+
+请忽略的文件夹与底下的文件：
+./examples
+./examples/simple01
+./examples/simple02
+./examples/simple03
+

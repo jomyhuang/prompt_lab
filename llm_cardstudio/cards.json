@@ -16,7 +16,7 @@
         "cost": 2,
         "attack": 2,
         "health": 2,
-        "effect": "嘲讽",
+        "effect": "持续效果：嘲讽",
         "status": "可用"
     },
     {
@@ -26,7 +26,7 @@
         "cost": 3,
         "attack": 3,
         "health": 2,
-        "effect": "远程",
+        "effect": "持续效果：远程",
         "status": "可用"
     },
     {
@@ -36,7 +36,7 @@
         "cost": 4,
         "attack": 2,
         "health": 3,
-        "effect": "法术伤害+1",
+        "effect": "持续效果：法术伤害+1",
         "status": "可用"
     },
     {
@@ -46,57 +46,7 @@
         "cost": 2,
         "attack": 0,
         "health": 0,
-        "effect": "恢复3点生命值",
-        "status": "可用"
-    },
-    {
-        "id": "card_26",
-        "name": "魔法学徒",
-        "type": "随从",
-        "cost": 2,
-        "attack": 1,
-        "health": 3,
-        "effect": "法术伤害+1,抽一张牌",
-        "status": "可用"
-    },
-    {
-        "id": "card_27",
-        "name": "时光倒流",
-        "type": "法术",
-        "cost": 4,
-        "attack": 0,
-        "health": 0,
-        "effect": "将一个随从的生命值恢复到满值",
-        "status": "可用"
-    },
-    {
-        "id": "card_28",
-        "name": "铁甲守卫",
-        "type": "随从",
-        "cost": 3,
-        "attack": 2,
-        "health": 5,
-        "effect": "嘲讽,受到伤害时获得1点护甲",
-        "status": "可用"
-    },
-    {
-        "id": "card_29",
-        "name": "连环闪电",
-        "type": "法术",
-        "cost": 3,
-        "attack": 0,
-        "health": 0,
-        "effect": "对一个随从造成3点伤害,多余的伤害传递给相邻随从",
-        "status": "可用"
-    },
-    {
-        "id": "card_30",
-        "name": "生命收割者",
-        "type": "随从",
-        "cost": 6,
-        "attack": 5,
-        "health": 5,
-        "effect": "战吼:摧毁一个生命值小于2的随从",
+        "effect": "当这张卡被打出时，恢复3点生命值",
         "status": "可用"
     },
     {
@@ -106,7 +56,7 @@
         "cost": 5,
         "attack": 4,
         "health": 5,
-        "effect": "嘲讽,护甲+2",
+        "effect": "持续效果：嘲讽。护甲+2",
         "status": "可用"
     },
     {
@@ -116,7 +66,7 @@
         "cost": 3,
         "attack": 0,
         "health": 0,
-        "effect": "造成4点伤害",
+        "effect": "当这张卡被打出时，造成4点伤害",
         "status": "可用"
     },
     {
@@ -126,7 +76,7 @@
         "cost": 3,
         "attack": 2,
         "health": 4,
-        "effect": "回合结束时治疗1点生命",
+        "effect": "每个回合结束时，治疗1点生命",
         "status": "可用"
     },
     {
@@ -136,7 +86,7 @@
         "cost": 4,
         "attack": 5,
         "health": 3,
-        "effect": "狂暴:受伤时攻击力+1",
+        "effect": "持续效果：狂暴。受伤时攻击力+1",
         "status": "可用"
     },
     {
@@ -146,7 +96,7 @@
         "cost": 2,
         "attack": 0,
         "health": 0,
-        "effect": "获得3点护甲",
+        "effect": "当这张卡被打出时，获得3点护甲",
         "status": "可用"
     },
     {
@@ -156,7 +106,7 @@
         "cost": 3,
         "attack": 4,
         "health": 2,
-        "effect": "潜行",
+        "effect": "持续效果：潜行",
         "status": "可用"
     },
     {
@@ -166,7 +116,7 @@
         "cost": 5,
         "attack": 0,
         "health": 0,
-        "effect": "对所有敌方随从造成2点伤害",
+        "effect": "当这张卡被打出时，对所有敌方随从造成2点伤害",
         "status": "可用"
     },
     {
@@ -176,7 +126,7 @@
         "cost": 4,
         "attack": 3,
         "health": 4,
-        "effect": "圣盾",
+        "effect": "持续效果：圣盾",
         "status": "可用"
     },
     {
@@ -186,7 +136,7 @@
         "cost": 4,
         "attack": 0,
         "health": 0,
-        "effect": "恢复所有友方角色2点生命",
+        "effect": "当这张卡被打出时，恢复所有友方角色2点生命",
         "status": "可用"
     },
     {
@@ -196,7 +146,7 @@
         "cost": 6,
         "attack": 6,
         "health": 6,
-        "effect": "法术伤害+2",
+        "effect": "持续效果：法术伤害+2",
         "status": "可用"
     },
     {
@@ -206,7 +156,7 @@
         "cost": 1,
         "attack": 0,
         "health": 0,
-        "effect": "造成2点伤害",
+        "effect": "当这张卡被打出时，造成2点伤害",
         "status": "可用"
     },
     {
@@ -216,7 +166,7 @@
         "cost": 4,
         "attack": 3,
         "health": 5,
-        "effect": "突袭",
+        "effect": "持续效果：突袭",
         "status": "可用"
     },
     {
@@ -226,7 +176,7 @@
         "cost": 3,
         "attack": 0,
         "health": 0,
-        "effect": "获得5点护甲",
+        "effect": "当这张卡被打出时，获得5点护甲",
         "status": "可用"
     },
     {
@@ -236,7 +186,7 @@
         "cost": 7,
         "attack": 5,
         "health": 8,
-        "effect": "嘲讽,无法被法术选中",
+        "effect": "持续效果：嘲讽。无法被法术选中",
         "status": "可用"
     },
     {
@@ -246,7 +196,7 @@
         "cost": 2,
         "attack": 0,
         "health": 0,
-        "effect": "造成3点伤害并使目标获得-1攻击力",
+        "effect": "当这张卡被打出时，造成3点伤害并使目标获得-1攻击力",
         "status": "可用"
     },
     {
@@ -256,7 +206,7 @@
         "cost": 5,
         "attack": 4,
         "health": 6,
-        "effect": "圣盾,嘲讽",
+        "effect": "持续效果：圣盾。嘲讽",
         "status": "可用"
     },
     {
@@ -266,7 +216,7 @@
         "cost": 3,
         "attack": 0,
         "health": 0,
-        "effect": "抽两张牌",
+        "effect": "当这张卡被打出时，抽两张牌",
         "status": "可用"
     },
     {
@@ -276,7 +226,7 @@
         "cost": 4,
         "attack": 4,
         "health": 4,
-        "effect": "战吼:造成2点伤害",
+        "effect": "当这张卡被打出时，造成2点伤害",
         "status": "可用"
     },
     {
@@ -286,7 +236,7 @@
         "cost": 1,
         "attack": 0,
         "health": 0,
-        "effect": "恢复2点生命值",
+        "effect": "当这张卡被打出时，恢复2点生命值",
         "status": "可用"
     },
     {
@@ -296,7 +246,57 @@
         "cost": 5,
         "attack": 3,
         "health": 6,
-        "effect": "法术伤害+2,回合结束时恢复1点生命",
+        "effect": "持续效果：法术伤害+2。每个回合结束时，恢复1点生命",
+        "status": "可用"
+    },
+    {
+        "id": "card_26",
+        "name": "魔法学徒",
+        "type": "随从",
+        "cost": 2,
+        "attack": 1,
+        "health": 3,
+        "effect": "持续效果：法术伤害+1。当这张卡被打出时，抽一张牌",
+        "status": "可用"
+    },
+    {
+        "id": "card_27",
+        "name": "时光倒流",
+        "type": "法术",
+        "cost": 4,
+        "attack": 0,
+        "health": 0,
+        "effect": "当这张卡被打出时，将一个随从的生命值恢复到满值",
+        "status": "可用"
+    },
+    {
+        "id": "card_28",
+        "name": "铁甲守卫",
+        "type": "随从",
+        "cost": 3,
+        "attack": 2,
+        "health": 5,
+        "effect": "持续效果：嘲讽。每当这个随从受到伤害时，获得1点护甲",
+        "status": "可用"
+    },
+    {
+        "id": "card_29",
+        "name": "连环闪电",
+        "type": "法术",
+        "cost": 3,
+        "attack": 0,
+        "health": 0,
+        "effect": "当这张卡被打出时，对一个随从造成3点伤害，多余的伤害传递给相邻随从",
+        "status": "可用"
+    },
+    {
+        "id": "card_30",
+        "name": "生命收割者",
+        "type": "随从",
+        "cost": 6,
+        "attack": 5,
+        "health": 5,
+        "effect": "当这张卡被打出时，摧毁一个生命值小于2的随从",
         "status": "可用"
     }
 ]

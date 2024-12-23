@@ -5,8 +5,10 @@ from pydantic import BaseModel, Field, validator, field_validator, ValidationErr
 from typing import List, Optional
 import json
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.schema import OutputParserException
 import os
 from dotenv import load_dotenv
+from model_config import get_available_models, create_model_instance, CARD_TEST_MODELS, get_default_model
 
 # 定义卡牌效果类型
 class CardEffect(BaseModel):
@@ -89,7 +91,8 @@ class Instruction(BaseModel):
 
 # 定义完整输出模型
 class CommandOutput(BaseModel):
-    card_id: str = Field(..., description="卡牌ID")
+    # card_id: str = Field(..., description="卡牌ID")
+    card_id: int = Field(..., description="卡牌ID")
     phase_playcard_instructions: List[Instruction] = Field(..., description="出牌阶段指令列表")
     phase_playcard_state_updates: Dict[str, Any] = Field(..., description="出牌阶段状态更新")
     phase_drawcard_instructions: Optional[List[Instruction]] = Field(None, description="抽牌阶段指令列表")
@@ -136,50 +139,172 @@ BASE_TEMPLATE = """
 1. MOVE_CARD: 移动卡牌
    - 参数: card_id, target_position, source
    - 示例: 从手牌移动到场上。target_position 必须是以下之一: hand, field, deck, discard, adjacent
+   示例模板：
+   {{
+        "action": "MOVE_CARD",
+        "parameters": {{
+            "card_id": "",
+            "target_position": "",
+            "source": ""
+        }},
+        "duration": 0.5,
+        "sequence": 0
+   }}
 
 2. PLAY_ANIMATION: 播放动画效果
    - 参数: animation_name, target_id
    - 示例: 播放治疗特效
+   示例模板：
+   {{
+        "action": "PLAY_ANIMATION",
+        "parameters": {{
+            "animation_name": "",
+            "target_id": ""
+        }},
+        "duration": 1.0,
+        "sequence": 0
+   }}
 
 3. UPDATE_HEALTH: 更新生命值
    - 参数: target_id, value, type(heal/damage)
    - 示例: 治疗玩家3点生命
+   示例模板：
+   {{
+        "action": "UPDATE_HEALTH",
+        "parameters": {{
+            "target_id": "",
+            "value": 0,
+            "type": ""
+        }},
+        "duration": 0.3,
+        "sequence": 0
+   }}
 
 4. SHOW_MESSAGE: 显示消息
    - 参数: message
    - 示例: 显示"治疗术恢复了3点生命值"
+   示例模板：
+   {{
+        "action": "SHOW_MESSAGE",
+        "parameters": {{
+            "message": ""
+        }},
+        "duration": 1.0,
+        "sequence": 0
+   }}
 
 5. CREATE_CARD: 创建卡牌
    - 参数: card_id, owner, position
    - 示例: 在玩家场上创建随从
+   示例模板：
+   {{
+        "action": "CREATE_CARD",
+        "parameters": {{
+            "card_id": "",
+            "owner": "",
+            "position": ""
+        }},
+        "duration": 0.5,
+        "sequence": 0
+   }}
 
 6. APPLY_EFFECT: 应用效果
    - 参数: effect_type, target_id, value
    - 示例: 给目标施加buff。effect_type 必须是以下之一: battlecry, deathrattle, taunt, charge, spell_damage, adjacent_effect, conditional_effect, armor_gain, card_draw, destroy_minion
+   示例模板：
+   {{
+        "action": "APPLY_EFFECT",
+        "parameters": {{
+            "effect_type": "",
+            "target_id": "",
+            "value": 0
+        }},
+        "duration": 0.5,
+        "sequence": 0
+   }}
 
 7. UPDATE_STATS: 更新统计数据
    - 参数: target_id, stats
    - 示例: 更新玩家攻击力
+   示例模板：
+   {{
+        "action": "UPDATE_STATS",
+        "parameters": {{
+            "target_id": "",
+            "stats": {{}}
+        }},
+        "duration": 0.3,
+        "sequence": 0
+   }}
 
 8. DRAW_CARD: 抽牌
    - 参数: target_id, draw_count
    - 示例: 玩家抽牌
+   示例模板：
+   {{
+        "action": "DRAW_CARD",
+        "parameters": {{
+            "target_id": "",
+            "draw_count": 0
+        }},
+        "duration": 0.5,
+        "sequence": 0
+   }}
 
 9. DESTROY_CARD: 摧毁卡牌
    - 参数: card_id
    - 示例: 摧毁场上的卡牌
+   示例模板：
+   {{
+        "action": "DESTROY_CARD",
+        "parameters": {{
+            "card_id": ""
+        }},
+        "duration": 0.5,
+        "sequence": 0
+   }}
 
 10. APPLY_ARMOR: 应用护甲
     - 参数: target_id, armor_value
     - 示例: 给玩家添加护甲
+    示例模板：
+    {{
+        "action": "APPLY_ARMOR",
+        "parameters": {{
+            "target_id": "",
+            "armor_value": 0
+        }},
+        "duration": 0.3,
+        "sequence": 0
+    }}
 
 11. TRIGGER_EFFECT: 触发效果
     - 参数: effect_type, target_id
     - 示例: 触发随从的死亡效果
+    示例模板：
+    {{
+        "action": "TRIGGER_EFFECT",
+        "parameters": {{
+            "effect_type": "",
+            "target_id": ""
+        }},
+        "duration": 0.5,
+        "sequence": 0
+    }}
 
 12. CHECK_CONDITION: 检查条件
     - 参数: condition, target_id
     - 示例: 检查玩家是否有足够的能量
+    示例模板：
+    {{
+        "action": "CHECK_CONDITION",
+        "parameters": {{
+            "condition": "",
+            "target_id": ""
+        }},
+        "duration": 0.3,
+        "sequence": 0
+    }}
 
 规则说明：
 1. 每个指令必须包含 action、parameters、duration 和 sequence
@@ -216,11 +341,47 @@ CARD_COMMAND_PROMPT = PromptTemplate(
 )
 
 class CardCommandGenerator:
-    def __init__(self):
+    def __init__(self, vendor_name: str = None, model_name: str = None):
+        """初始化命令生成器
+        
+        Args:
+            vendor_name: 模型供应商名称，如果为None则使用默认值
+            model_name: 模型名称，如果为None则使用供应商的baseline模型
+        """
+        # 加载环境变量
+        load_dotenv()
+        
         self.output_parser = PydanticOutputParser(pydantic_object=CommandOutput)
         self.prompt_template = CARD_COMMAND_PROMPT
-        load_dotenv()
-        self.llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", google_api_key=os.environ.get("GOOGLE_API_KEY"))
+        
+        from model_config import get_available_models, create_model_instance, get_default_model
+        
+        # 获取可用模型
+        available_vendors = get_available_models(use_default=True)
+        if not available_vendors:
+            raise ValueError("没有可用的模型配置，且默认配置也不可用")
+            
+        # 如果没有指定供应商和模型，使用默认配置
+        if vendor_name is None and model_name is None:
+            vendor_name, model_name = get_default_model()
+        # 如果只指定了供应商，使用其baseline模型
+        elif model_name is None:
+            if vendor_name not in available_vendors:
+                raise ValueError(f"供应商 {vendor_name} 不可用")
+            vendor_config = available_vendors[vendor_name]
+            model_name = vendor_config.baseline_models[0]
+        # 验证指定的供应商和模型
+        else:
+            if vendor_name not in available_vendors:
+                raise ValueError(f"供应商 {vendor_name} 不可用")
+            vendor_config = available_vendors[vendor_name]
+            if model_name not in vendor_config.models:
+                raise ValueError(f"模型 {model_name} 不在供应商 {vendor_name} 的模型列表中")
+            
+        # 创建模型实例
+        self.llm = create_model_instance(vendor_name, model_name)
+        self.vendor_name = vendor_name
+        self.model_name = model_name
 
     def generate_command_template(self, action: str) -> Dict:
         """生成指令模板"""
@@ -236,22 +397,105 @@ class CardCommandGenerator:
             player_action=player_action
         )
 
-    def parse_llm_response(self, llm_response: str) -> CommandOutput:
+    def save_validation_result(self, result: Dict[str, Any], success: bool, case_info: Dict[str, str] = None):
+        """保存验证结果到JSON文件
+        
+        Args:
+            result: 验证结果数据
+            success: 验证是否成功
+            case_info: 测试用例信息，包含case_id和description
+        """
+        import datetime
+        import os
+        from collections import OrderedDict
+        
+        # 创建save_com目录（如果不存在）
+        save_dir = "save_com"
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+            
+        # 生成时间戳作为文件名
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        filename = f"{save_dir}/validation_{timestamp}.json"
+        
+        # 使用OrderedDict确保字段顺序
+        save_data = OrderedDict([
+            ("timestamp", timestamp),
+            ("success", success),
+            ("model_info", {
+                "vendor": self.vendor_name,
+                "model": self.model_name
+            })
+        ])
+        
+        # 如果有测试用例信息，添加到保存数据中
+        if case_info:
+            save_data.update([
+                ("case_id", case_info.get("case_id")),
+                ("description", case_info.get("description")),
+                ("card_effects", case_info.get("effects", "")),
+                ("player_action", case_info.get("player_action", ""))
+            ])
+            
+        save_data["result"] = result
+        
+        # 保存到JSON文件，使用indent=4确保更好的格式化，并对中文使用原始编码
+        with open(filename, "w", encoding="utf-8") as f:
+            json.dump(
+                save_data,
+                f,
+                ensure_ascii=False,  # 保持中文原始编码
+                indent=4,           # 使用4空格缩进
+                separators=(',', ': ')  # 在冒号后添加空格，使格式更整洁
+            )
+
+    def parse_llm_response(self, llm_response: str, case_info: Dict[str, str] = None):
         """解析LLM响应，提供详细的错误信息用于调试"""
         try:
-            return self.output_parser.parse(llm_response)
-        except ValidationError as ve:
-            # 格式化验证错误信息
-            error_messages = []
-            for error in ve.errors():
-                location = " -> ".join(str(loc) for loc in error["loc"])
-                error_messages.append(f"位置 {location}: {error['msg']}")
-            raise ValidationError(error_messages, ve.model)
-        except Exception as e:
+            # 尝试解析响应
+            parsed_output = self.output_parser.parse(llm_response)
+            # 保存成功的验证结果
+            self.save_validation_result(
+                result=json.loads(parsed_output.json()),
+                success=True,
+                case_info=case_info
+            )
+            return parsed_output
+        except (ValidationError, OutputParserException) as e:
+            # 清理原始响应中的markdown代码块标记
+            cleaned_response = llm_response
+            if "```json" in cleaned_response:
+                cleaned_response = cleaned_response.split("```json")[-1]
+                if "```" in cleaned_response:
+                    cleaned_response = cleaned_response.split("```")[0]
+            
+            # 尝试解析清理后的响应为JSON
+            try:
+                response_json = json.loads(cleaned_response.strip())
+            except json.JSONDecodeError:
+                response_json = {"raw_text": cleaned_response}
+            
+            # 格式化错误消息
             error_msg = str(e)
-            if "Got:" in error_msg:
-                error_msg = "Got: " + error_msg.split("Got:")[1].strip()
-            raise ValueError(error_msg)
+            error_lines = error_msg.split(". ")
+            formatted_error = {
+                "main_error": error_lines[0],
+                "validation_details": error_lines[1] if len(error_lines) > 1 else None,
+                "troubleshooting_url": next((line for line in error_lines if "visit:" in line), None)
+            }
+            
+            # 保存失败的验证结果
+            error_data = {
+                "error_type": type(e).__name__,
+                "error_message": formatted_error,
+                "original_response": response_json
+            }
+            self.save_validation_result(
+                result=error_data,
+                success=False,
+                case_info=case_info
+            )
+            raise e
 
     def validate_game_state(self, game_state: Dict) -> bool:
         """验证游戏状态格式"""
@@ -347,139 +591,199 @@ def main():
         prompt = generator.format_prompt(game_state, card_data, player_action)
         
         # 调用LLM获取响应
+
         print("\n generator.llm.invoke")
         response = generator.llm.invoke(prompt)
 
         print("\nLLM响应:")
-        print(response.content)
+        # print(response.content)
         
         # 解析响应
         parsed_output = generator.parse_llm_response(response.content)
         print("\n解析后的输出:")
-        print(parsed_output.model_dump_json(indent=2))
+        print(parsed_output.model_dump_json(indent=2, exclude_unset=True))
         print("\n完成解析")
             
     except ValidationError as ve:
-        print("数据验证错误:")
+        # 格式化验证错误信息
+        error_messages = []
         for error in ve.errors():
             location = " -> ".join(str(loc) for loc in error["loc"])
-            print(f"- 位置 {location}: {error['msg']}")
+            error_messages.append(f"位置 {location}: {error['msg']}")
+        print(f"验证错误: {', '.join(error_messages)}")
+    except OutputParserException as e:
+        error_msg = str(e)
+        if "Got:" in error_msg:
+            error_msg = "Got: " + error_msg.split("Got:")[1].strip()
+        print(f"输出解析错误: {error_msg}")
     except Exception as e:
         print(f"错误: {str(e)}")
 
-# 指令模板示例
-COMMAND_TEMPLATES = {
-    "MOVE_CARD": {
-        "action": "MOVE_CARD",
-        "parameters": {
-            "card_id": "",
-            "target_position": "",
-            "source": ""
-        },
-        "duration": 0.5,
-        "sequence": 0
-    },
-    "PLAY_ANIMATION": {
-        "action": "PLAY_ANIMATION",
-        "parameters": {
-            "animation_name": "",
-            "target_id": ""
-        },
-        "duration": 1.0,
-        "sequence": 0
-    },
-    "UPDATE_HEALTH": {
-        "action": "UPDATE_HEALTH",
-        "parameters": {
-            "target_id": "",
-            "value": 0,
-            "type": ""
-        },
-        "duration": 0.3,
-        "sequence": 0
-    },
-    "SHOW_MESSAGE": {
-        "action": "SHOW_MESSAGE",
-        "parameters": {
-            "message": ""
-        },
-        "duration": 1.0,
-        "sequence": 0
-    },
-    "CREATE_CARD": {
-        "action": "CREATE_CARD",
-        "parameters": {
-            "card_id": "",
-            "owner": "",
-            "position": ""
-        },
-        "duration": 0.5,
-        "sequence": 0
-    },
-    "APPLY_EFFECT": {
-        "action": "APPLY_EFFECT",
-        "parameters": {
-            "effect_type": "",
-            "target_id": "",
-            "value": 0
-        },
-        "duration": 0.5,
-        "sequence": 0
-    },
-    "UPDATE_STATS": {
-        "action": "UPDATE_STATS",
-        "parameters": {
-            "target_id": "",
-            "stats": {}
-        },
-        "duration": 0.3,
-        "sequence": 0
-    },
-    "DRAW_CARD": {
-        "action": "DRAW_CARD",
-        "parameters": {
-            "target_id": "",
-            "draw_count": 0
-        },
-        "duration": 0.5,
-        "sequence": 0
-    },
-    "DESTROY_CARD": {
-        "action": "DESTROY_CARD",
-        "parameters": {
-            "card_id": ""
-        },
-        "duration": 0.5,
-        "sequence": 0
-    },
-    "APPLY_ARMOR": {
-        "action": "APPLY_ARMOR",
-        "parameters": {
-            "target_id": "",
-            "armor_value": 0
-        },
-        "duration": 0.3,
-        "sequence": 0
-    },
-    "TRIGGER_EFFECT": {
-        "action": "TRIGGER_EFFECT",
-        "parameters": {
-            "effect_type": "",
-            "target_id": ""
-        },
-        "duration": 0.5,
-        "sequence": 0
-    },
-    "CHECK_CONDITION": {
-        "action": "CHECK_CONDITION",
-        "parameters": {
-            "condition": "",
-            "target_id": ""
-        },
-        "duration": 0.3,
-        "sequence": 0
-    }
-}
+
+def run_command_tests(case_id: str = None, vendor_name: str = None, model_name: str = None):
+    """运行命令生成测试用例
+    
+    Args:
+        case_id: 指定要运行的测试用例ID。如果为None，则显示选择菜单
+        vendor_name: 模型供应商名称
+        model_name: 模型名称
+    """
+    import json
+    from pathlib import Path
+    from model_config import get_available_models, CARD_TEST_MODELS, get_default_model
+
+    # 显示模型选择菜单
+    if vendor_name is None or model_name is None:
+        available_vendors = get_available_models()
+        if not available_vendors:
+            print("错误: 没有可用的模型配置")
+            return
+            
+        print("\n可用的模型配置:")
+        vendor_list = list(available_vendors.keys())
+        for i, vendor_name in enumerate(vendor_list, 1):
+            config = available_vendors[vendor_name]
+            print(f"\n{i}. {config.name}:")
+            for j, model in enumerate(config.models, 1):
+                is_baseline = "(*)" if model in config.baseline_models else ""
+                print(f"  {i}.{j} {model} {is_baseline}")
+                
+        try:
+            vendor_choice = int(input("\n请选择供应商 (1-{0}): ".format(len(vendor_list))))
+            if vendor_choice < 1 or vendor_choice > len(vendor_list):
+                print("错误: 无效的供应商选择")
+                return
+                
+            vendor_name = vendor_list[vendor_choice - 1]
+            config = available_vendors[vendor_name]
+            
+            model_choice = int(input(f"请选择模型 (1-{len(config.models)}): "))
+            if model_choice < 1 or model_choice > len(config.models):
+                print("错误: 无效的模型选择")
+                return
+                
+            model_name = config.models[model_choice - 1]
+        except ValueError:
+            print("错误: 请输入有效的数字")
+            return
+
+    # 创建命令生成器实例
+    try:
+        generator = CardCommandGenerator(vendor_name, model_name)
+        print(f"\n使用模型: {generator.vendor_name} / {generator.model_name}")
+    except Exception as e:
+        print(f"错误: 创建模型实例失败: {str(e)}")
+        return
+
+    # 读取测试数据
+    test_file = Path("pe_com_test.json")
+    if not test_file.exists():
+        print(f"错误: 测试文件 {test_file} 不存在")
+        return
+
+    try:
+        with open(test_file, "r", encoding="utf-8") as f:
+            test_data = json.load(f)
+    except json.JSONDecodeError as e:
+        print(f"错误: 测试文件JSON格式无效: {e}")
+        return
+    except Exception as e:
+        print(f"错误: 读取测试文件时出错: {e}")
+        return
+    
+    # 如果没有指定case_id，显示选择菜单
+    if case_id is None:
+        print("\n可用的测试用例:")
+        print("0. 运行所有测试用例")
+        for i, test_case in enumerate(test_data["test_cases"], 1):
+            print(f"{i}. {test_case['description']}")
+        
+        try:
+            choice = int(input("\n请选择要运行的测试用例 (0-{0}): ".format(len(test_data["test_cases"]))))
+            if choice < 0 or choice > len(test_data["test_cases"]):
+                print("错误: 无效的选择")
+                return
+                
+            if choice == 0:
+                case_id = None
+            else:
+                case_id = test_data["test_cases"][choice - 1]["case_id"]
+        except ValueError:
+            print("错误: 请输入有效的数字")
+            return
+
+    # 根据选择运行测试
+    test_cases = test_data["test_cases"]
+    if case_id:
+        # 运行单个测试用例
+        test_case = next((tc for tc in test_cases if tc["case_id"] == case_id), None)
+        if test_case:
+            run_single_test(generator, test_case)
+        else:
+            print(f"错误: 未找到测试用例 {case_id}")
+    else:
+        # 运行所有测试用例
+        print("\n运行所有测试用例...")
+        for test_case in test_cases:
+            run_single_test(generator, test_case)
+
+def run_single_test(generator: CardCommandGenerator, test_case: dict):
+    """运行单个测试用例
+    
+    Args:
+        generator: 命令生成器实例
+        test_case: 测试用例数据
+    """
+    import time
+    
+    start_time = time.time()
+    
+    print(f"\n执行测试用例: {test_case['case_id']}")
+    print(f"描述: {test_case['description']}")
+    print(f"动作: {test_case['player_action']}")
+    
+    try:
+        # 格式化提示词
+        prompt = generator.format_prompt(
+            game_state=test_case["game_state"],
+            card_data=test_case["card_data"],
+            player_action=test_case["player_action"]
+        )
+        
+        # 调用LLM获取响应
+        print("generator.llm.invoke")
+        print(f"正在使用模型: {generator.vendor_name}/{generator.model_name}")
+        llm_response = generator.llm.invoke(prompt).content
+        
+        # 解析响应
+        try:
+            # 从card_data中获取effects
+            card_effects = test_case.get("card_data", {}).get("effects", "")
+            parsed_output = generator.parse_llm_response(
+                llm_response,
+                case_info={
+                    "case_id": test_case["case_id"],
+                    "description": test_case["description"],
+                    "effects": card_effects,
+                    "player_action": test_case["player_action"]
+                }
+            )
+            end_time = time.time()
+            execution_time = end_time - start_time
+            print(f"✓ 测试成功: {test_case['case_id']}")
+            print(f"执行时间: {execution_time:.2f} 秒")
+        except Exception as e:
+            end_time = time.time()
+            execution_time = end_time - start_time
+            print(f"✗ 测试失败: {test_case['case_id']}")
+            print(f"错误信息: {str(e)}")
+            print(f"执行时间: {execution_time:.2f} 秒")
+            
+    except Exception as e:
+        end_time = time.time()
+        execution_time = end_time - start_time
+        print(f"✗ 测试执行错误: {str(e)}")
+        print(f"执行时间: {execution_time:.2f} 秒")
 
 if __name__ == "__main__":
-    main()
+    run_command_tests()

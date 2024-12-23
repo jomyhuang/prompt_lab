@@ -112,8 +112,9 @@ class LLMInteraction:
         
         # 使用新的 LLMChain API
         self.context_prompt = ChatPromptTemplate.from_template(context_template)
-        self.context_chain = LLMChain(llm=self.llm, prompt=self.context_prompt)
-        
+        # self.context_chain = LLMChain(llm=self.llm, prompt=self.context_prompt)
+        self.context_chain = self.context_prompt | self.llm        
+
         # 初始化动作解析提示模板
         action_template = """你是一个游戏助手，负责解析玩家的行动。
         
@@ -122,14 +123,19 @@ class LLMInteraction:
         请解析玩家的意图并给出建议。
         """
         self.action_prompt = ChatPromptTemplate.from_template(action_template)
-        self.action_chain = LLMChain(llm=self.llm, prompt=self.action_prompt)
+        # self.action_chain = LLMChain(llm=self.llm, prompt=self.action_prompt)
         
+        self.action_chain = self.action_prompt | self.llm  # action_chain 使用 | 运算符
+        
+
         # 初始化AI响应提示模板
         self.ai_response_prompt = ChatPromptTemplate.from_messages([
             ("system", "你是一个游戏助手，负责分析游戏状态并给出建议。"),
             ("human", "{game_state}")
         ])
-        self.ai_response_chain = LLMChain(llm=self.llm, prompt=self.ai_response_prompt)
+        # self.ai_response_chain = LLMChain(llm=self.llm, prompt=self.ai_response_prompt)
+        self.ai_response_chain = self.ai_response_prompt | self.llm 
+    
     
     def format_history(self):
         """格式化聊天历史"""
@@ -173,7 +179,8 @@ class LLMInteraction:
         try:
             # 使用 LLMChain 生成响应
             response = self.context_chain.invoke(context_data)
-            ai_message = response["text"]  # LLMChain 返回一个包含 "text" 键的字典
+            ai_message = response   #直接返回字符串无需使用 response["text"]
+            # ai_message = response["text"]
             
             # 更新对话历史
             self.chat_history.append({"role": "user", "content": user_input})

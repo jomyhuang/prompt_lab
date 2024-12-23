@@ -1,0 +1,93 @@
+[
+    {
+        "card_id": "all",
+        "phase_playcard_instructions": [
+            {
+                "action": "MOVE_CARD",
+                "parameters": {
+                    "card_id": "all",
+                    "target_position": "field",
+                    "source": "hand"
+                },
+                "duration": 0.5,
+                "sequence": 1
+            }
+        ]   
+    },
+    {
+        "card_id": "card_16",
+        "phase_playcard_instructions": [
+            {
+                "action": "MOVE_CARD",
+                "parameters": {
+                    "card_id": "card_16",
+                    "target_position": "field",
+                    "source": "hand"
+                },
+                "duration": 0.5,
+                "sequence": 1
+            },
+            {
+                "action": "PLAY_ANIMATION",
+                "parameters": {
+                    "animation_name": "spell_damage",
+                    "target_id": "player"
+                },
+                "duration": 0.8,
+                "sequence": 2
+            },
+            {
+                "action": "UPDATE_HEALTH",
+                "parameters": {
+                    "target_id": "player",
+                    "value": 2,
+                    "type": "damage"
+                },
+                "duration": 0.3,
+                "sequence": 3
+            },
+            {
+                "action": "SHOW_MESSAGE",
+                "parameters": {
+                    "message": "魔法学徒造成2点法术伤害"
+                },
+                "duration": 1.0,
+                "sequence": 4
+            },
+            {
+                "action": "DRAW_CARD",
+                "parameters": {
+                    "target_id": "player",
+                    "draw_count": 1
+                },
+                "duration": 0.5,
+                "sequence": 5
+            },
+            {
+                "action": "SHOW_MESSAGE",
+                "parameters": {
+                    "message": "魔法学徒抽了一张牌"
+                },
+                "duration": 1.0,
+                "sequence": 6
+            }
+        ],
+        "phase_playcard_state_updates": {
+            "player_stats": {
+                "hp": 18,
+                "energy": 0,
+                "armor": 0
+            },
+            "hand": [],
+            "field": [
+                "card_16"
+            ],
+            "deck": [
+                "card_1",
+                "card_2",
+                "card_3"
+            ],
+            "discard": []
+        }    
+    }
+]
