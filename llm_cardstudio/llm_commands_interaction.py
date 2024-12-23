@@ -21,7 +21,9 @@ class CommandProcessor:
             'DESTROY_CARD': self._handle_destroy_card,
             'APPLY_ARMOR': self._handle_apply_armor,
             'TRIGGER_EFFECT': self._handle_trigger_effect,
-            'CHECK_CONDITION': self._handle_check_condition
+            'CHECK_CONDITION': self._handle_check_condition,
+            'APPLY_DAMAGE': self._handle_apply_damage,
+            'CHECK_AND_DESTROY': self._handle_check_and_destroy
         }
         
         self.effect_handlers = {
@@ -358,6 +360,52 @@ class CommandProcessor:
             print(f"检查条件失败: {str(e)}")
             return False
 
+    def _handle_apply_damage(self, params: Dict[str, Any]) -> bool:
+        """处理伤害应用指令"""
+        attacker_id = params.get('attacker_id')
+        defender_id = params.get('defender_id')
+        damage_type = params.get('damage_type', 'attack')
+        
+        # 获取攻击者卡牌
+        attacker = next((card for card in self.game_manager.game_state['field_cards']['player'] 
+                        if card['id'] == attacker_id), None)
+        if not attacker:
+            return False
+            
+        damage = attacker.get('attack', 0)
+        
+        if defender_id:
+            # 攻击场上的卡牌
+            defender = next((card for card in self.game_manager.game_state['field_cards']['opponent'] 
+                           if card['id'] == defender_id), None)
+            if defender:
+                defender['health'] = defender['health'] - damage
+                self.game_manager.add_game_message(f"🗡️ {attacker['name']} 对 {defender['name']} 造成了 {damage} 点伤害")
+        else:
+            # 直接攻击对手
+            self.game_manager.game_state['opponent_stats']['hp'] -= damage
+            self.game_manager.add_game_message(f"🗡️ {attacker['name']} 对对手造成了 {damage} 点伤害")
+            
+        return True
+
+    def _handle_check_and_destroy(self, params: Dict[str, Any]) -> bool:
+        """检查并处理卡牌销毁"""
+        card_id = params.get('card_id')
+        if not card_id:
+            return False
+            
+        # 检查对手场上的卡牌
+        opponent_field = self.game_manager.game_state['field_cards']['opponent']
+        card = next((card for card in opponent_field if card['id'] == card_id), None)
+        
+        if card and card['health'] <= 0:
+            # 移动到墓地
+            opponent_field.remove(card)
+            self.game_manager.deck_state['opponent']['discard_pile'].append(card)
+            self.game_manager.add_game_message(f"💀 {card['name']} 被摧毁了")
+            
+        return True
+
     # 效果处理器
     def _handle_battlecry(self, target_id: str, value: Any = None) -> bool:
         """处理战吼效果"""
@@ -609,3 +657,60 @@ class CommandProcessor:
             # self.game_manager.add_game_message(error_message)
             return False
 
+    def get_attack_command_sequence(self, attacker_id: str, defender_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        
+        """生成攻击命令序列
+        {
+            {
+                "action": "MOVE_CARD",
+                "parameters": {
+                    "card_id": "all",
+                    "target_position": "field",
+                    "source": "hand"
+                },
+                "duration": 0.5,
+                "sequence": 1
+            }
+        ]  
+        """
+        commands = []
+        
+        # 1. 检查攻击者状态
+        commands.append({
+            'command': 'CHECK_CONDITION',
+            'params': {
+                'condition_type': 'can_attack',
+                'card_id': attacker_id
+            }
+        })
+        
+        # 2. 执行攻击动画
+        commands.append({
+            'command': 'PLAY_ANIMATION',
+            'params': {
+                'animation_type': 'attack',
+                'source_id': attacker_id,
+                'target_id': defender_id if defender_id else 'opponent'
+            }
+        })
+        
+        # 3. 计算并应用伤害
+        commands.append({
+            'command': 'APPLY_DAMAGE',
+            'params': {
+                'attacker_id': attacker_id,
+                'defender_id': defender_id,
+                'damage_type': 'attack'
+            }
+        })
+        
+        # 4. 如果攻击目标是卡牌且生命值降至0，则移到墓地
+        if defender_id:
+            commands.append({
+                'command': 'CHECK_AND_DESTROY',
+                'params': {
+                    'card_id': defender_id
+                }
+            })
+            
+        return commands

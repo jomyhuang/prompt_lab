@@ -357,22 +357,17 @@ def render_game_view():
         st.caption("手牌")
         st.markdown(f"✋ {len(player_hand)}")
 
-    # 渲染游戏控制区域
-    render_game_controls(gameloop_state)
+    # # 渲染游戏附加控制区域
+    # render_sub_controls(gameloop_state)
 
 
-def render_game_controls(gameloop_state):
-    """渲染游戏控制区域
-    Args:
-        gameloop_state: 当前游戏状态
-    """
-    if gameloop_state == "welcome":
-        if st.button("开始游戏", use_container_width=True):
-            st.session_state.game_manager.start_game()
-            update_ui_state()
+def render_sub_controls(gameloop_state):
+    """渲染游戏附加控制区域"""
+    game_manager = st.session_state.game_manager
+    return    
 
 
-def render_chat_view():
+def render_chat_view_game_controls():
     """渲染聊天界面"""
     st.header("💬 LLM Card Studio")
     
@@ -449,6 +444,9 @@ def render_chat_view():
                     
             with button_cols[1]:
                 # 检查是否已经攻击过和是否是第一回合
+                # 初始化session state用于控制选择框的显示
+                if 'show_attack_options' not in st.session_state:
+                    st.session_state.show_attack_options = False
                 has_attacked = st.session_state.game_manager.game_state.get("has_attacked_this_turn", False)
                 is_first_turn = st.session_state.game_manager.game_state["turn_info"]["current_turn"] == 1
                 attack_disabled = has_attacked or is_first_turn
@@ -459,12 +457,15 @@ def render_chat_view():
                 elif is_first_turn:
                     attack_button_text = "⚔️ 第一回合禁止攻击"
                 
+                game_manager = st.session_state.game_manager
+                player_field = game_manager.game_state["field_cards"]["player"]
+                opponent_field = game_manager.game_state["field_cards"]["opponent"]
+
                 if st.button(attack_button_text, key="attack", use_container_width=True, disabled=attack_disabled):
                     message = "我要攻击对手"
                     # add_user_message(message)
-                    process_user_input(message)
-                    update_ui_state()
-                    return
+                    # process_user_input(message)
+                    st.session_state.show_attack_options = True
                     
             with button_cols[2]:
                 if st.button("给出建议", key="get_advice", use_container_width=True):
@@ -486,7 +487,29 @@ def render_chat_view():
                     update_ui_state()
                     # st.session_state.game_manager._process_gameloop_state()
                     return
-            
+
+            # 附加指令区
+            if st.session_state.show_attack_options:
+                # 创建攻击者选择框
+                attacker_options = [f"{card['name']} (ID: {card['id']})" for card in player_field]
+                if attacker_options:
+                    selected_attacker = st.selectbox("选择攻击者", attacker_options, key="attacker_select")
+                    attacker_id = selected_attacker.split("ID: ")[1][:-1] if selected_attacker else None
+                    
+                    # 创建防御者选择框
+                    defender_options = ["直接攻击对手"] + [f"{card['name']} (ID: {card['id']})" for card in opponent_field]
+                    selected_defender = st.selectbox("选择攻击目标", defender_options, key="defender_select")
+                    
+                    if st.button("确认攻击", disabled=not selected_attacker):
+                        if selected_defender == "直接攻击对手":
+                            game_manager.perform_attack(attacker_id)
+                        else:
+                            defender_id = selected_defender.split("ID: ")[1][:-1]
+                            game_manager.perform_attack(attacker_id, defender_id)
+                        st.session_state.show_attack_options = False    
+                        update_ui_state()
+                        return
+
             # 特别说明：进入process_user_input() 如果用户输入不是使用卡牌的操作，则直接更新UI状态
             # process_user_input( user_input )
             #   process_message = user_input
@@ -567,9 +590,9 @@ def main():
     with game_col:
         render_game_view()
     
-    # 渲染聊天区
+    # 渲染聊天区与游戏控制区
     with chat_col:
-        render_chat_view()
+        render_chat_view_game_controls()
 
 if __name__ == "__main__":
     main()
