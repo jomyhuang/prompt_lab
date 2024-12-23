@@ -1,4 +1,5 @@
 
+
 处理游戏状态循环：
 _process_gameloop_state(self):
 gameloop_state = self.game_state.get("gameloop_state", "welcome")
@@ -53,4 +54,5 @@ render_game_view()
     - 负责渲染游戏区
 render_chat_view()
     - 负责渲染聊天区与消息
+    - 渲染指令集序列 
     - 进入player_turn时，渲染玩家操作UI区
