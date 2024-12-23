@@ -1,14 +1,16 @@
-Always respond in 中文，务必输出正确的UTF-8中文编码文件
+Always respond in 中文, 务必使用UTF-8中文编码文件
 不要任意修改你认为的编码错误的中文,不要修复中文编码问题
 
 # 技术栈要求
 1. 基于LLM langchain 大模型语言应用开发
 2. 提示词工程文本需要严谨清晰
-3. 基于streamlit构建用户界面,要使用标准化的组件，不要使用css来美化界面
-4. 在没有收到清楚指令的时候，不要任意调整streamlit的GUI界面布局，如果有疑问，请直接询问
-5. 不要任意修改GUI中文本的内容，如果有疑问，请直接询问
+3. 基于streamlit构建用户界面,要使用标准化的组件,不要使用css来美化界面
+4. 在没有收到清楚指令的时候,不要任意调整streamlit的GUI界面布局,如果有疑问,请直接询问
+5. 除了要求重新构建外,不要任意修改GUI中文本,布局,按钮,组件等增加或减少,如果有疑问，请直接询问
+6. 请直接修改要求的错误代码,但不要浪费时间重构除问题以外的代码
 
-参考最新API文件：
+
+# 参考最新API文件:
 streamlit API
 https://docs.streamlit.io
 https://docs.streamlit.io/develop/api-reference

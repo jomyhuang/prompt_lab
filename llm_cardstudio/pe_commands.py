@@ -383,11 +383,11 @@ class CardCommandGenerator:
         self.vendor_name = vendor_name
         self.model_name = model_name
 
-    def generate_command_template(self, action: str) -> Dict:
-        """生成指令模板"""
-        if action not in COMMAND_TEMPLATES:
-            raise ValueError(f'未知的指令类型: {action}')
-        return COMMAND_TEMPLATES[action].copy()
+    # def generate_command_template(self, action: str) -> Dict:
+    #     """生成指令模板"""
+    #     if action not in COMMAND_TEMPLATES:
+    #         raise ValueError(f'未知的指令类型: {action}')
+    #     return COMMAND_TEMPLATES[action].copy()
 
     def format_prompt(self, game_state: Dict, card_data: Dict, player_action: str) -> str:
         """格式化提示词"""
