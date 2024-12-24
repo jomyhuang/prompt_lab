@@ -3,7 +3,7 @@ import os
 import random
 import time
 import streamlit as st
-from typing import Dict, List, Any, Tuple, Optional
+from typing import Dict, List, Any, Tuple
 from re import T
 from debug_utils import debug_utils
 
@@ -487,44 +487,54 @@ class GameManager:
             debug_utils.log("game", "获取存档列表失败", {"错误": str(e)})
             return []
 
-    def perform_attack(self, attacker_id: str, defender_id: Optional[str] = None) -> bool:
-        """执行攻击行为
+    def perform_attack(self, attacker):
+        """执行攻击动作
         
         Args:
-            attacker_id: 攻击者卡牌ID
-            defender_id: 防御者卡牌ID，如果为None则直接攻击对手
+            attacker: 攻击方，可选值："player" 或 "opponent"
             
         Returns:
-            bool: 攻击是否成功执行
+            bool: 游戏是否结束
         """
-        # 获取攻击命令序列
-        attack_commands = self.commands_processor.get_attack_command_sequence(attacker_id, defender_id)
+        # 检查是否是第一回合
+        if self.game_state["turn_info"]["current_turn"] == 1:
+            self.add_game_message("❌ 第一回合不能进行攻击")
+            return False
+            
+        # 检查是否已经攻击过
+        if attacker == "player" and self.game_state.get("has_attacked_this_turn", False):
+            self.add_game_message("❌ 本回合已经攻击过了")
+            return False
+            
+        # 计算攻击伤害
+        attacker_field = self.game_state["field_cards"][attacker]
+        defender = "opponent" if attacker == "player" else "player"
         
-        # 设置命令序列
-        self.command_sequence['commands'] = attack_commands
-        self.command_sequence['current_index'] = 0
-        self.command_sequence['is_executing'] = True
+        total_damage = sum(card.get("attack", 0) for card in attacker_field)
         
-        # 执行命令序列(internal runner)
-        success = True
-        for command in attack_commands:
-            handler = self.commands_processor.command_handlers.get(command['command'])
-            if handler:
-                if not handler(command['params']):
-                    success = False
-                    break
-            else:
-                success = False
-                break
-                
-        self.command_sequence['is_executing'] = False
+        # 造成伤害
+        self.game_state[f"{defender}_stats"]["hp"] -= total_damage
+        
+        # 记录已攻击标记
+        if attacker == "player":
+            self.game_state["has_attacked_this_turn"] = True
+        
+        # 添加战斗消息
+        attacker_symbol = "🎮" if attacker == "player" else "🤖"
+        self.add_game_message(
+            f"{attacker_symbol} {'我方' if attacker == 'player' else '对手'}发起攻击！\n"
+            f"造成了 {total_damage} 点伤害\n"
+            f"对手剩余生命值: {self.game_state[f'{defender}_stats']['hp']}"
+        )
         
         # 检查游戏是否结束
-        if self.game_state['opponent_stats']['hp'] <= 0:
-            self.game_state['gameloop_state'] = 'game_over'
-            self.add_game_message("🏆 游戏结束！你获得了胜利！")
+        if self.game_state[f"{defender}_stats"]["hp"] <= 0:
+            winner = attacker
+            self.add_game_message(f"🏆 {'我方' if winner == 'player' else '对手'}获得胜利！")
+            self.game_state["game_over"] = True
+            return True
             
-        return success
+        return False
 
     def ai_decide_attack(self):
         """AI决定是否攻击
