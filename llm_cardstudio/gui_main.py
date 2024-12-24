@@ -154,7 +154,7 @@ def render_game_view():
     # process_game_loop()
     # render_command_progress()
     
-    st.header("🎮 卡牌战场", divider="rainbow")
+    st.header("🎮 LLM Card Studio", divider="rainbow")
     
     # 获取游戏状态
     game_state = st.session_state.game_manager.get_game_state()
@@ -393,56 +393,41 @@ def render_game_controls(gameloop_state):
 
 def render_chat_view():
     """渲染聊天界面"""
-    st.header("💬 LLM Card Studio")
-    
     # 获取游戏状态
     game_state = st.session_state.game_manager.get_game_state()
     gameloop_state = game_state.get("gameloop_state", "welcome")
     
-    # 渲聊天消息（在任何回合都显示）
+    # 渲染聊天消息历史
     chat_container = st.container(height=500)
     with chat_container:
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-    # render command progress 渲染命令执行进度
-    # render AI in progress 渲染AI执行进度
+    # 处理游戏循环并检查是否需要更新UI
     if process_game_loop():
-        # 如果有进行渲染, 则更新画面
         update_ui_state()
         return
 
-    # 在欢迎界面和玩家回合的action阶段显示交互界面
-    if gameloop_state == "welcome":
-        # 欢迎界面对话
-        user_input = st.chat_input("你可以问我任何关于游戏的问题...", key="welcome_chat_input")
-        if user_input:
-            # add_user_message(user_input)
-            # process_user_input_ai(user_input)
-            add_user_input_ai(user_input)
-            update_ui_state()
-            return
-    
     elif gameloop_state == "player_turn":
         # 玩家回合界面
         st.markdown("### 🎮 你的回合")
         
-        # 有在action阶段才显示交互界面
+        # 优先处理卡牌选择状态
+        # 如果正在选择卡牌,显示选择界面并返回
+        if st.session_state.card_selection["is_selecting"]:
+            render_card_selection()
+            return
+            
+        # 检查玩家回合状态
         player_turn_state = game_state.get("player_turn_state")
         if player_turn_state == "action":
-            
-            # 如果正在选择卡牌,显示选择界面
-            if st.session_state.card_selection["is_selecting"]:
-                render_card_selection()
-                return
-            
-            # 渲染行动控制界面
+            # 在action阶段渲染玩家操作界面
             render_action_controls()
         else:
-            # 非action阶段，直接自动执行状态
+            # 非action阶段，自动处理游戏状态
             st.session_state.game_manager._process_gameloop_state()
-    
+
     elif gameloop_state == "opponent_turn":
         # 对手回合界面
         st.markdown("### 🤖 对手回合")
@@ -682,7 +667,7 @@ def main():
     """主函数"""
     # 设置页面配置
     st.set_page_config(
-        page_title="🎮 AI卡牌游戏",
+        page_title="🎮 LLM Card Studio",
         page_icon="🎮",
         layout="wide",
         initial_sidebar_state="collapsed"

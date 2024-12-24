@@ -76,20 +76,25 @@ os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY")
 
 class LLMInteraction:
     def __init__(self):
-        # 初始化Gemini模型
-        self.llm = ChatGoogleGenerativeAI(
-            api_key=os.getenv("GOOGLE_API_KEY"),
-            model=os.getenv("GOOGLE_MODEL_NAME", "gemini-pro"),  # 从环境变量读取模型名称，默认为gemini-pro
+        if False:
+            # 初始化Gemini模型
+            self.llm = ChatGoogleGenerativeAI(
+                api_key=os.getenv("GOOGLE_API_KEY"),
+                model=os.getenv("GOOGLE_MODEL_NAME", "gemini-pro"),  # 从环境变量读取模型名称，默认为gemini-pro
+                temperature=0.7,
+                streaming=True
+            )
+            print("使用Gemini模型")
+        else:
+            # 初始化OpenAI模型
+            self.llm = ChatOpenAI(
+                api_key=os.getenv("OPENAI_API_KEY"),
+            model=os.getenv("OPENAI_MODEL_NAME", "gpt-4o"),  # 从环境变量读取模型名称，默认为gpt-4o
+            base_url=os.getenv("OPENAI_API_BASE"),
             temperature=0.7,
-            streaming=True
-        )
-        # self.llm = ChatOpenAI(
-        #     api_key=os.getenv("OPENAI_API_KEY"),
-        #     model=os.getenv("OPENAI_MODEL_NAME", "gpt-4o"),  # 从环境变量读取模型名称，默认为gpt-4o
-        #     base_url=os.getenv("OPENAI_API_BASE"),
-        #     temperature=0.7,
-        #     streaming=True
-        # )
+                streaming=True
+            )
+            print("使用OpenAI API模型")
 
         # 初始化对话历史
         self.chat_history = []
