@@ -4,15 +4,20 @@ TAG02 TODO:
 攻击 select_target
 
 
-1. 修改perform_attack 参考 play_card 使用命令序列模式
-2. 增加 perform_attack 的命令序列在 llm_commands_interaction.py 中
-3. 命令序列如下
-3-1.选择我方场上的卡牌(如果没有,则无法攻击)
-  - 在 gui_main.py 中增加在对话框下方使用selectbox选择我方场上的卡牌
-3-2.选择敌方场上的卡牌(如果没有,跳过该指令则直接攻击对手伤害)
-  - 在 gui_main.py 中增加在对话框下方使用selectbox选择敌方场上的卡牌
-4. 将伤害的卡牌移动到墓地,计算对手伤害
-5. 结束攻击, 如果对手生命值小于等于0,则游戏结束
+1.在 gui_main.py 中增加攻击UI, 进入呼叫perform_attack前, 如果没有指定的攻击者,或是没有指定的目标,则激活UI进入选择攻击者或是选择目标
+在render_chat_view 对话框下方的攻击按钮,按下后,
+在下方,使用selectbox选择我方场上的卡牌,选择敌方场上的卡牌
+按下确认攻击键, 通过user_input 激活 perform_attack
+2. 修改perform_attack 参考 play_card 使用命令序列模式
+3. 增加 perform_attack 的命令序列在 llm_commands_interaction.py 中
+3-1. perform_attack开始进入attack,并执行命令序列
+4. 命令序列如下
+4-1.检查我方场上的卡牌(如果没有,则无法攻击),选择敌方场上的卡牌(如果没有,跳过该指令则直接攻击对手伤害)
+4-2. 将伤害的卡牌移动到墓地,计算对手伤害
+5. 结束攻击, 回到action阶段玩家后续行动
+
+
+
 
 
 

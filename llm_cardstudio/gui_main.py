@@ -19,7 +19,16 @@ if 'initialized' not in st.session_state:
     st.session_state.messages = [{"role": "assistant", "content": "准备好战斗了吗？"}]
     st.session_state.initialized = True
     st.session_state.ai_input = ""
-
+    # 初始化卡牌选择状态
+    st.session_state.card_selection = {
+        "is_selecting": False,  # 是否处于选择状态
+        "action_type": None,    # 动作类型 (attack/play/etc)
+        "source_type": None,    # 来源类型 (hand/field)
+        "target_type": None,    # 目标类型 (opponent_field/opponent_hero)
+        "selected_card": None,  # 已选择的卡牌
+        "target_card": None,    # 已选择的目标
+        "callback": None        # 选择完成后的回调函数
+    }
 
 def update_ui_state(show_success_message=None):
     """更新界面状态
@@ -95,7 +104,6 @@ def process_user_input_ai(message):
 def process_user_input(user_input):
     """处理用户输入"""
     with st.spinner("处理中..."):
-
         add_user_message(user_input)
         # 解析用户输入
         action_result = st.session_state.llm_interaction.parse_user_action(user_input)
@@ -110,15 +118,26 @@ def process_user_input(user_input):
                 
                 # 使用卡牌（会自动处理命令）
                 result = st.session_state.game_manager.play_card(str(selected_card_id))
-                return
+            return
     
-        # 如果是攻击的操作，进行攻击
+        # 如果是攻击的操作
         elif "攻击" in user_input:
-            # 进行攻击
-            game_over = st.session_state.game_manager.perform_attack("player")
-            if game_over:
-                # 如果检查到游戏结束，则直接回合结束
-                st.session_state.game_manager.game_state["player_turn_state"] = "end_turn"
+            if st.session_state.card_selection["is_selecting"]:
+                selected_card = st.session_state.card_selection["selected_card"]
+                target_card = st.session_state.card_selection["target_card"]
+                if selected_card:
+                    target_id = target_card["id"] if isinstance(target_card, dict) else target_card
+                    game_over = st.session_state.game_manager.perform_attack(
+                        attacker_card_id=selected_card["id"],
+                        target_card_id=target_id,
+                        player_type="player"
+                    )
+                    # 只有在游戏结束时才结束回合
+                    # if game_over:
+                    #     st.session_state.game_manager.game_state["player_turn_state"] = "end_turn"
+                end_card_selection()
+            else:
+                start_card_selection("attack", "field", "opponent_field")
             return
     
         # 如果是结束回合的操作，直接结束回合
@@ -126,9 +145,9 @@ def process_user_input(user_input):
             st.session_state.game_manager.game_state["player_turn_state"] = "end_turn"
             return
 
-    # 如果用户输入不是使用卡牌的操作，则直接更新UI状态
-    # process_message = user_input
-    # update_ui_state()
+        # 如果用户输入不是使用卡牌的操作，则直接更新UI状态
+        # process_message = user_input
+        # update_ui_state()
 
 def render_game_view():
     """渲染游戏画面"""
@@ -399,6 +418,8 @@ def render_chat_view():
         # 欢迎界面对话
         user_input = st.chat_input("你可以问我任何关于游戏的问题...", key="welcome_chat_input")
         if user_input:
+            # add_user_message(user_input)
+            # process_user_input_ai(user_input)
             add_user_input_ai(user_input)
             update_ui_state()
             return
@@ -410,99 +431,14 @@ def render_chat_view():
         # 有在action阶段才显示交互界面
         player_turn_state = game_state.get("player_turn_state")
         if player_turn_state == "action":
-            # 玩家手牌和操作区
-            available_cards = st.session_state.game_manager.get_available_cards()
-            # 按费用排序卡牌
-            sorted_cards = sorted(available_cards, key=lambda card: card.get('cost', 0))
             
-            # 卡牌选择
-            selected_card_id = st.selectbox(
-                "选择卡牌",
-                options=[str(card['id']) for card in sorted_cards],
-                format_func=lambda x: next((f"{card['name']} - {card['type']} (费用:{card.get('cost', 0)})" 
-                                      for card in sorted_cards if str(card['id']) == x), x),
-                key="card_select"
-            )
-            
-            # 用户输入区域
-            user_input = st.chat_input("输入你的行动或问题...", key="chat_input")
-            if user_input:
-                # add_user_message(user_input)
-                # process_user_input_ai(user_input)
-                add_user_input_ai(user_input)
-                update_ui_state()
+            # 如果正在选择卡牌,显示选择界面
+            if st.session_state.card_selection["is_selecting"]:
+                render_card_selection()
                 return
-
-            # 创建按钮列
-            button_cols = st.columns(4)  # 改为4列以容纳攻击按钮
             
-            # 添加快捷操作钮
-            with button_cols[0]:
-                if st.button("使用卡牌", key="use_card", use_container_width=True):
-                    card = next((card for card in sorted_cards if str(card['id']) == selected_card_id), None)
-                    if card:
-                        message = f"我使用{card['name']}卡牌"
-                    # add_user_message(message)
-                    process_user_input(message)
-                    update_ui_state()
-                    return
-                    
-            with button_cols[1]:
-                # 检查是否已经攻击过和是否是第一回合
-                has_attacked = st.session_state.game_manager.game_state.get("has_attacked_this_turn", False)
-                is_first_turn = st.session_state.game_manager.game_state["turn_info"]["current_turn"] == 1
-                attack_disabled = has_attacked or is_first_turn
-                
-                attack_button_text = "⚔️ 攻击"
-                if has_attacked:
-                    attack_button_text = "⚔️ 已攻击"
-                elif is_first_turn:
-                    attack_button_text = "⚔️ 第一回合禁止攻击"
-                
-                if st.button(attack_button_text, key="attack", use_container_width=True, disabled=attack_disabled):
-                    message = "我要攻击对手"
-                    # add_user_message(message)
-                    process_user_input(message)
-                    update_ui_state()
-                    return
-                    
-            with button_cols[2]:
-                if st.button("给出建议", key="get_advice", use_container_width=True):
-                    card = next((card for card in sorted_cards if str(card['id']) == selected_card_id), None)
-                    if card:
-                        message = f"分析当前局势，并给出使用{card['name']}的建议"
-                    # add_user_message(message)
-                    # process_user_input_ai(message)
-                    add_user_input_ai(message)
-                    update_ui_state()
-                    return
-                   
-            with button_cols[3]:
-                if st.button("结束回合", key="end_turn", use_container_width=True):
-                    message = "我要结束当前回合"
-                    # st.session_state.game_manager.game_state["player_turn_state"] = "end_turn"
-                    # add_user_message(message)
-                    process_user_input(message)
-                    update_ui_state()
-                    # st.session_state.game_manager._process_gameloop_state()
-                    return
-            
-            # 特别说明：进入process_user_input() 如果用户输入不是使用卡牌的操作，则直接更新UI状态
-            # process_user_input( user_input )
-            #   process_message = user_input
-            #   update_ui_state()
-
-            # 获取选中卡牌的详细信息并显示在按钮下方
-            selected_card = next((card for card in sorted_cards if str(card['id']) == selected_card_id), None)
-            if selected_card:
-                with st.container():
-                    card_info = (f"🎴 {selected_card['name']} | "
-                               f"类型: {selected_card['type']} | "
-                               f"费用: {selected_card.get('cost', 0)} | "
-                               f"攻击: {selected_card.get('attack', 0)} | "
-                               f"生命: {selected_card.get('health', 0)} | "
-                               f"效果: {selected_card.get('effect', '无')}")
-                    st.text(card_info)
+            # 渲染行动控制界面
+            render_action_controls()
         else:
             # 非action阶段，直接自动执行状态
             st.session_state.game_manager._process_gameloop_state()
@@ -549,6 +485,198 @@ def add_user_input_ai(message):
     add_user_message(message)
     st.session_state.ai_input = message
 
+def start_card_selection(action_type, source_type, target_type, callback=None):
+    """开始卡牌选择流程
+    
+    Args:
+        action_type: 动作类型 (attack/play/etc)
+        source_type: 来源类型 (hand/field)
+        target_type: 目标类型 (opponent_field/opponent_hero)
+        callback: 选择完成后的回调函数
+    """
+    st.session_state.card_selection = {
+        "is_selecting": True,
+        "action_type": action_type,
+        "source_type": source_type,
+        "target_type": target_type,
+        "selected_card": None,
+        "target_card": None,
+        "callback": callback
+    }
+
+def end_card_selection():
+    """结束卡牌选择流程"""
+    if st.session_state.card_selection["callback"]:
+        st.session_state.card_selection["callback"](
+            st.session_state.card_selection["selected_card"],
+            st.session_state.card_selection["target_card"]
+        )
+    st.session_state.card_selection = {
+        "is_selecting": False,
+        "action_type": None,
+        "source_type": None,
+        "target_type": None,
+        "selected_card": None,
+        "target_card": None,
+        "callback": None
+    }
+
+def render_card_selection():
+    """渲染卡牌选择界面"""
+    if not st.session_state.card_selection["is_selecting"]:
+        return
+
+    game_state = st.session_state.game_manager.get_game_state()
+    selection = st.session_state.card_selection
+
+    # 获取来源卡牌列表
+    source_cards = []
+    if selection["source_type"] == "hand":
+        source_cards = game_state.get("hand_cards", {}).get("player", [])
+    elif selection["source_type"] == "field":
+        source_cards = game_state.get("field_cards", {}).get("player", [])
+
+    # 获取目标卡牌列表
+    target_cards = []
+    if selection["target_type"] == "opponent_field":
+        target_cards = game_state.get("field_cards", {}).get("opponent", [])
+
+    # 渲染来源卡牌选择
+    if source_cards:
+        source_id = st.selectbox(
+            "选择卡牌",
+            options=[str(card['id']) for card in source_cards],
+            format_func=lambda x: next((f"{card['name']} (攻击力:{card.get('attack', 0)})" 
+                                if selection["action_type"] == "attack" 
+                                else f"{card['name']} (费用:{card.get('cost', 0)})"
+                                for card in source_cards if str(card['id']) == x), x),
+            key="source_select"
+        )
+        selection["selected_card"] = next((card for card in source_cards if str(card['id']) == source_id), None)
+
+    # 渲染目标选择
+    if selection["target_type"] == "opponent_field":
+        if target_cards:
+            target_options = [str(card['id']) for card in target_cards]
+            if selection["action_type"] == "attack":
+                target_options.append("opponent_hero")
+            target_id = st.selectbox(
+                "选择目标",
+                options=target_options,
+                format_func=lambda x: "对手英雄" if x == "opponent_hero" else next((f"{card['name']} (生命值:{card.get('health', 0)})" 
+                                            for card in target_cards if str(card['id']) == x), x),
+                key="target_select"
+            )
+            if target_id == "opponent_hero":
+                selection["target_card"] = "opponent_hero"
+            else:
+                selection["target_card"] = next((card for card in target_cards if str(card['id']) == target_id), None)
+        elif selection["action_type"] == "attack":
+            st.info("对手场上没有卡牌,将直接攻击对手英雄")
+            selection["target_card"] = "opponent_hero"
+
+    # 确认按钮
+    if st.button("确认", key="confirm_selection", use_container_width=True):
+        if selection["selected_card"]:
+            if selection["action_type"] == "attack":
+                # 构造攻击命令
+                attacker_card = selection["selected_card"]
+                target_card = selection["target_card"]
+                if target_card == "opponent_hero":
+                    message = f"我用{attacker_card['name']}攻击对手英雄"
+                else:
+                    message = f"我用{attacker_card['name']}攻击{target_card['name']}"
+                # 处理攻击命令
+                process_user_input(message)
+            end_card_selection()
+            update_ui_state()
+            return
+
+def render_action_controls():
+    """渲染玩家行动控制界面
+
+    """
+
+    # 玩家手牌和操作区
+    available_cards = st.session_state.game_manager.get_available_cards()
+    # 按费用排序卡牌
+    sorted_cards = sorted(available_cards, key=lambda card: card.get('cost', 0))
+
+    # 卡牌选择
+    selected_card_id = st.selectbox(
+        "选择卡牌",
+        options=[str(card['id']) for card in sorted_cards],
+        format_func=lambda x: next((f"{card['name']} - {card['type']} (费用:{card.get('cost', 0)})" 
+                              for card in sorted_cards if str(card['id']) == x), x),
+        key="card_select"
+    )
+    
+    # 用户输入区域
+    user_input = st.chat_input("输入你的行动或问题...", key="chat_input")
+    if user_input:
+        add_user_input_ai(user_input)
+        update_ui_state()
+        return
+
+    # 创建按钮列
+    button_cols = st.columns(4)
+    
+    # 使用卡牌按钮
+    with button_cols[0]:
+        if st.button("使用卡牌", key="use_card", use_container_width=True):
+            card = next((card for card in sorted_cards if str(card['id']) == selected_card_id), None)
+            if card:
+                message = f"我使用{card['name']}卡牌"
+                process_user_input(message)
+                update_ui_state()
+                return
+    
+    # 攻击按钮
+    with button_cols[1]:
+        has_attacked = st.session_state.game_manager.game_state.get("has_attacked_this_turn", False)
+        is_first_turn = st.session_state.game_manager.game_state["turn_info"]["current_turn"] == 1
+        attack_disabled = has_attacked or is_first_turn
+        
+        attack_button_text = "⚔️ 攻击"
+        if has_attacked:
+            attack_button_text = "⚔️ 已攻击"
+        elif is_first_turn:
+            attack_button_text = "⚔️ 第一回合禁止攻击"
+        
+        if st.button(attack_button_text, key="attack", use_container_width=True, disabled=attack_disabled):
+            start_card_selection("attack", "field", "opponent_field")
+            update_ui_state()
+            return
+    
+    # 建议按钮        
+    with button_cols[2]:
+        if st.button("给出建议", key="get_advice", use_container_width=True):
+            card = next((card for card in sorted_cards if str(card['id']) == selected_card_id), None)
+            if card:
+                message = f"分析当前局势，并给出使用{card['name']}的建议"
+                add_user_input_ai(message)
+                update_ui_state()
+                return
+    
+    # 结束回合按钮
+    with button_cols[3]:
+        if st.button("结束回合", key="end_turn", use_container_width=True):
+            message = "我要结束当前回合"
+            process_user_input(message)
+            update_ui_state()
+            return
+
+    # 显示选中卡牌信息
+    selected_card = next((card for card in sorted_cards if str(card['id']) == selected_card_id), None)
+    if selected_card:
+        with st.container():
+            card_info = (f"🎴 {selected_card['name']} | "
+                       f"类型: {selected_card['type']} | "
+                       f"费用: {selected_card.get('cost', 0)} | "
+                       f"攻击: {selected_card.get('attack', 0)} | "
+                       f"生命: {selected_card.get('health', 0)} | "
+                       f"效果: {selected_card.get('effect', '无')}")
+            st.text(card_info)
 
 def main():
     """主函数"""
