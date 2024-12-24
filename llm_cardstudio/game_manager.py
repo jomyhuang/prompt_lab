@@ -487,14 +487,16 @@ class GameManager:
             debug_utils.log("game", "获取存档列表失败", {"错误": str(e)})
             return []
 
-    def perform_attack(self, attacker):
+    def perform_attack(self, attacker_card_id: str, target_card_id: str = None, player_type: str = "player") -> bool:
         """执行攻击动作
         
         Args:
-            attacker: 攻击方，可选值："player" 或 "opponent"
+            attacker_card_id: 攻击者卡牌ID
+            target_card_id: 目标卡牌ID，如果为None则直接攻击对手
+            player_type: 攻击方，可选值："player" 或 "opponent"
             
         Returns:
-            bool: 游戏是否结束
+            bool: 攻击是否成功执行
         """
         # 检查是否是第一回合
         if self.game_state["turn_info"]["current_turn"] == 1:
@@ -502,38 +504,41 @@ class GameManager:
             return False
             
         # 检查是否已经攻击过
-        if attacker == "player" and self.game_state.get("has_attacked_this_turn", False):
+        if player_type == "player" and self.game_state.get("has_attacked_this_turn", False):
             self.add_game_message("❌ 本回合已经攻击过了")
             return False
             
-        # 计算攻击伤害
-        attacker_field = self.game_state["field_cards"][attacker]
-        defender = "opponent" if attacker == "player" else "player"
-        
-        total_damage = sum(card.get("attack", 0) for card in attacker_field)
-        
-        # 造成伤害
-        self.game_state[f"{defender}_stats"]["hp"] -= total_damage
-        
-        # 记录已攻击标记
-        if attacker == "player":
-            self.game_state["has_attacked_this_turn"] = True
-        
-        # 添加战斗消息
-        attacker_symbol = "🎮" if attacker == "player" else "🤖"
-        self.add_game_message(
-            f"{attacker_symbol} {'我方' if attacker == 'player' else '对手'}发起攻击！\n"
-            f"造成了 {total_damage} 点伤害\n"
-            f"对手剩余生命值: {self.game_state[f'{defender}_stats']['hp']}"
-        )
-        
-        # 检查游戏是否结束
-        if self.game_state[f"{defender}_stats"]["hp"] <= 0:
-            winner = attacker
-            self.add_game_message(f"🏆 {'我方' if winner == 'player' else '对手'}获得胜利！")
-            self.game_state["game_over"] = True
-            return True
+        # 获取攻击者卡牌
+        attacker_field = self.game_state["field_cards"][player_type]
+        attacker_card = next((card for card in attacker_field if card["id"] == attacker_card_id), None)
+        if not attacker_card:
+            self.add_game_message("❌ 找不到指定的攻击者卡牌")
+            return False
             
+        # 获取目标卡牌（如果有）
+        target_card = None
+        if target_card_id:
+            opponent_type = "opponent" if player_type == "player" else "player"
+            opponent_field = self.game_state["field_cards"][opponent_type]
+            target_card = next((card for card in opponent_field if card["id"] == target_card_id), None)
+            if not target_card:
+                self.add_game_message("❌ 找不到指定的目标卡牌")
+                return False
+                
+        # 使用命令处理器执行攻击命令序列
+        if hasattr(self, "command_processor"):
+            success = self.command_processor.process_attack_commands(
+                attacker_card=attacker_card,
+                target_card=target_card,
+                player_type=player_type
+            )
+            
+            if success:
+                # 记录已攻击标记
+                if player_type == "player":
+                    self.game_state["has_attacked_this_turn"] = True
+                return True
+                
         return False
 
     def ai_decide_attack(self):
