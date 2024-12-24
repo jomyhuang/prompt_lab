@@ -1,3 +1,12 @@
+"""
+游戏管理器模块,负责:
+1. 游戏状态管理
+2. 游戏流程控制
+3. 卡牌操作处理
+4. 回合系统
+5. 存档管理
+"""
+
 import json
 import os
 import random
@@ -9,7 +18,13 @@ from debug_utils import debug_utils
 
 class GameManager:
     def __init__(self):
-        """初始化游戏管理器"""
+        """初始化游戏管理器:
+        1. 加载卡牌数据
+        2. 初始化游戏状态
+        3. 设置命令处理器
+        4. 初始化命令序列
+        5. 初始化游戏消息
+        """
         self.load_cards()
         self.selected_decks = None
         self._initialize_game_state()
@@ -21,9 +36,9 @@ class GameManager:
         # 初始化命令序列状态
         if 'command_sequence' not in st.session_state:
             st.session_state.command_sequence = {
-                'commands': [],
-                'current_index': 0,
-                'is_executing': False
+                'commands': [],  # 待执行的命令列表
+                'current_index': 0,  # 当前执行到的命令索引
+                'is_executing': False  # 是否正在执行命令序列
             }
             
         # 初始化游戏消息
@@ -38,14 +53,22 @@ class GameManager:
         self.commands_processor = processor
 
     def _initialize_game_state(self):
-        """初始化游戏状态"""
+        """初始化游戏状态,包括:
+        1. 游戏主循环状态
+        2. 玩家状态(生命值、能量、护甲)
+        3. 对手状态
+        4. 回合信息
+        5. 场上卡牌
+        6. 手牌
+        7. 游戏日志
+        """
         # 初始化游戏状态
         self.game_state = {
             "gameloop_state": "welcome",  # 游戏主循环状态
             "player_stats": {
-                "hp": 20,
-                "energy": 3,
-                "armor": 0
+                "hp": 20,  # 初始生命值
+                "energy": 3,  # 初始能量
+                "armor": 0  # 初始护甲
             },
             "opponent_stats": {
                 "hp": 20,
@@ -53,8 +76,8 @@ class GameManager:
                 "armor": 0
             },
             "turn_info": {
-                "current_turn": 0,
-                "active_player": None
+                "current_turn": 0,  # 当前回合数
+                "active_player": None  # 当前行动玩家
             },
             "field_cards": {
                 "player": [],    # 我方场上的卡牌
@@ -64,15 +87,15 @@ class GameManager:
                 "player": [],    # 我方手牌
                 "opponent": []   # 对手手牌
             },
-            "log": []
+            "log": []  # 游戏日志
         }
         
         # 初始化卡组状态
         self.deck_state = {
             "player": {
-                "deck": [],
-                "draw_history": [],
-                "discard_pile": []
+                "deck": [],  # 牌堆
+                "draw_history": [],  # 抽牌历史
+                "discard_pile": []  # 弃牌堆
             },
             "opponent": {
                 "deck": [],
@@ -112,6 +135,11 @@ class GameManager:
             
         Returns:
             bool: 是否成功使用卡牌
+            
+        流程:
+        1. 查找手牌中的目标卡牌
+        2. 检查能量是否足够
+        3. 处理卡牌命令
         """
         try:
             # 调试日志
@@ -123,12 +151,7 @@ class GameManager:
             # 获取手牌
             hand_cards = self.game_state['hand_cards'][player_type]
             
-            # # 调试日志
-            # debug_utils.log("card", "当前手牌", {
-            #     "hand_cards": [{"id": c.get("id")} for c in hand_cards]
-            # })
-            
-            # 查找卡牌并移动卡牌
+            # 查找卡牌
             card = None
             for i, c in enumerate(hand_cards):
                 if str(c.get('id', '')) == str(card_id):
@@ -142,31 +165,10 @@ class GameManager:
                     "可用卡牌": [{"id": c.get("id")} for c in hand_cards]
                 })
                 return False
-                
-            # 检查是否有足够的法力值
-            # think: 检查条件与计算处理放到handle_move_card 或这里?
-            # if self.game_state[f'{player_type}_stats']['energy'] < card.get('cost', 0):
-            #     self.add_game_message("法力值不足")
-            #     return False
-                
-            # # 扣除法力值
-            # self.game_state[f'{player_type}_stats']['energy'] -= card.get('cost', 0)
-            
-            # 添加到场上(使用handle_move_card)
-            # self.game_state['hand_cards'][player_type].remove(card)
-            # self.game_state['field_cards'][player_type].append(card)
-            
-            # # 调试日志
-            # debug_utils.log("card", "使用卡牌", {
-            #     "card": {"id": card.get("id")},
-            #     "remaining_energy": self.game_state[f'{player_type}_stats']['energy']
-            # })
             
             # 处理卡牌命令
-            # TODO: 如果没有效果指令集,则无法驱动handle_move_card
             if self.commands_processor:
                 success = self.commands_processor.process_card_commands(card_id, card, player_type, "phase_playcard")
-                # 出牌阶段
                 if not success:
                     print(f"处理卡牌命令失败: {card_id}")
             
@@ -226,7 +228,14 @@ class GameManager:
         time.sleep(duration)
 
     def _process_game_start(self):
-        """处理游戏开始阶段"""
+        """处理游戏开始阶段
+        
+        流程:
+        1. 显示初始化消息
+        2. 重置游戏状态
+        3. 初始化玩家和对手卡组
+        4. 随机打乱卡组
+        """
         self._player_phase_transition(1.0)
         self.add_game_message("🎮 **游戏初始化...**")
         debug_utils.log("game", "游戏初始化")
@@ -267,7 +276,12 @@ class GameManager:
             debug_utils.log("game", "警告：没有选择卡组")
 
     def _process_deal_cards(self):
-        """处理发牌阶段"""
+        """处理发牌阶段
+        
+        流程:
+        1. 显示发牌消息
+        2. 双方各抽3张初始手牌
+        """
         self._player_phase_transition(1.0)
         self.add_game_message("🎴 **发放初始手牌...**")
         debug_utils.log("game", "发放初始手牌")
@@ -278,7 +292,12 @@ class GameManager:
             self.draw_card("opponent")
 
     def _process_determine_first(self):
-        """决定首轮玩家"""
+        """决定首轮玩家
+        
+        流程:
+        1. 显示先手消息
+        2. 设置先手玩家(目前默认玩家先手)
+        """
         self._player_phase_transition(1.0)
         # 暂时默认玩家先手
         first_player = "player"
@@ -289,7 +308,14 @@ class GameManager:
         self.game_state["turn_info"]["active_player"] = first_player
 
     def _process_new_turn(self):
-        """处理新回合"""
+        """处理新回合
+        
+        流程:
+        1. 回合数+1
+        2. 重置能量(基础3点,每回合+1,最大10点)
+        3. 重置攻击标记
+        4. 显示回合消息
+        """
         self._player_phase_transition(0.5)
         self.game_state["turn_info"]["current_turn"] += 1
         active_player = self.game_state["turn_info"]["active_player"]
@@ -309,7 +335,13 @@ class GameManager:
         )
 
     def _process_next_turn(self):
-        """处理回合切换"""
+        """处理回合切换
+        
+        流程:
+        1. 获取当前玩家
+        2. 切换到下一个玩家
+        3. 记录调试信息
+        """
         current_player = self.game_state["turn_info"]["active_player"]
         next_player = "opponent" if current_player == "player" else "player"
         self.game_state["turn_info"]["active_player"] = next_player
@@ -321,14 +353,29 @@ class GameManager:
         })
 
     def _process_end_game(self):
-        """处理游戏结束"""
+        """处理游戏结束
+        
+        流程:
+        1. 判断获胜者
+        2. 显示结束消息
+        3. 记录调试信息
+        """
         self._player_phase_transition(1.0)
         winner = self._determine_winner()
         self.add_game_message(f"🏆 **游戏结束 - {'你' if winner == 'player' else '对手'}获胜！**")
         debug_utils.log("game", "游戏结束", {"获胜者": winner})
 
     def _determine_winner(self):
-        """判断获胜者"""
+        """判断获胜者
+        
+        Returns:
+            str: 获胜者("player"/"opponent"/None)
+            
+        判定规则:
+        1. 玩家生命值<=0时,对手获胜
+        2. 对手生命值<=0时,玩家获胜
+        3. 其他情况返回None
+        """
         if self.game_state["player_stats"]["hp"] <= 0:
             return "opponent"
         elif self.game_state["opponent_stats"]["hp"] <= 0:
@@ -336,15 +383,25 @@ class GameManager:
         return None
 
     def start_game(self):
-        """开始新游戏"""
+        """开始新游戏
+        
+        流程:
+        1. 设置游戏状态为start_game
+        2. 触发游戏状态处理
+        """
         self.game_state["gameloop_state"] = "start_game"
         self._process_gameloop_state()
 
     def _ai_thinking(self, message, duration=0.5):
         """模拟AI思考过程
+        
         Args:
             message: 思考内容提示
-            duration: 思考时间（秒）
+            duration: 思考时间(秒)
+            
+        流程:
+        1. 显示思考消息
+        2. 等待指定时间
         """
         self.add_game_message(f"🤖AI 正在思考: {message}")
         self._player_phase_transition(duration)
@@ -357,6 +414,12 @@ class GameManager:
             
         Returns:
             tuple: (bool, str) - (是否成功, 成功/错误信息)
+            
+        流程:
+        1. 创建存档目录
+        2. 准备保存数据
+        3. 写入文件
+        4. 记录调试信息
         """
         try:
             # 确保存档目录存在
@@ -402,6 +465,13 @@ class GameManager:
             
         Returns:
             tuple: (bool, str) - (是否成功, 成功/错误信息)
+            
+        流程:
+        1. 检查存档文件
+        2. 读取存档数据
+        3. 验证数据完整性
+        4. 恢复游戏状态
+        5. 记录调试信息
         """
         try:
             # 构建存档路径
@@ -448,7 +518,6 @@ class GameManager:
                 "存档名称": save_name,
                 "存档路径": save_path,
                 "警告信息": warning_messages if warning_messages else "无"
-                # "游戏状态": self.game_state
             })
             
             success_message = [f"成功加载存档: {save_name}",
@@ -472,7 +541,12 @@ class GameManager:
         """获取所有存档文件列表
         
         Returns:
-            list: 存档文件名列表（不含.json后缀）
+            list: 存档文件名列表(不含.json后缀)
+            
+        流程:
+        1. 检查存档目录
+        2. 获取所有.json文件
+        3. 去掉后缀并排序
         """
         try:
             save_dir = os.path.join(os.path.dirname(__file__), "saves")
@@ -495,6 +569,12 @@ class GameManager:
             
         Returns:
             bool: 游戏是否结束
+            
+        流程:
+        1. 检查是否可以攻击(第一回合/已攻击过)
+        2. 计算攻击伤害
+        3. 造成伤害
+        4. 检查游戏是否结束
         """
         # 检查是否是第一回合
         if self.game_state["turn_info"]["current_turn"] == 1:
@@ -568,7 +648,20 @@ class GameManager:
     #     self.game_state[f"{active_player}_stats"]["energy"] = max_energy
 
     def _process_gameloop_state(self):
-        """处理游戏主循环状态"""
+        """处理游戏主循环状态,包括:
+        1. welcome: 欢迎界面
+        2. start_game: 游戏开始初始化
+        3. deal_cards: 发牌阶段
+        4. determine_first: 决定先手
+        5. new_turn: 新回合开始
+        6. player_turn: 玩家回合
+        7. opponent_turn: 对手回合
+        8. next_turn: 回合切换
+        9. end_game: 游戏结束
+        
+        Returns:
+            bool: 状态处理是否成功
+        """
         gameloop_state = self.game_state.get("gameloop_state", "welcome")
         
         if gameloop_state == "welcome":

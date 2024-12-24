@@ -1,17 +1,30 @@
+"""
+主要的GUI界面模块,负责:
+1. 游戏界面的渲染和布局
+2. 用户交互的处理
+3. 游戏状态的展示
+4. 游戏流程的控制
+"""
 import re
 from turtle import up
 import streamlit as st
-from llm_interaction import LLMInteraction
-from game_manager import GameManager
-from player_manager import PlayerManager
-from debug_utils import debug_utils
+from llm_interaction import LLMInteraction  # LLM交互模块
+from game_manager import GameManager  # 游戏管理模块
+from player_manager import PlayerManager  # 玩家管理模块
+from debug_utils import debug_utils  # 调试工具
 import os
 import json
 import time
 from datetime import datetime
 from typing import List, Dict
 
-# 初始化全局session state
+# 初始化全局session state,包含:
+# - game_manager: 游戏管理器实例
+# - llm_interaction: LLM交互实例 
+# - player_manager: 玩家管理器实例
+# - messages: 对话历史
+# - initialized: 初始化标记
+# - ai_input: AI输入缓存
 if 'initialized' not in st.session_state:
     st.session_state.game_manager = GameManager()
     st.session_state.llm_interaction = LLMInteraction()
@@ -39,7 +52,14 @@ def update_ui_state(show_success_message=None):
 #     return False
 
 def process_game_loop():
-    """处理游戏循环"""
+    """处理游戏主循环,包括:
+    1. 检查和执行命令序列
+    2. 处理AI响应
+    3. 更新游戏状态
+    
+    Returns:
+        bool: 是否需要更新界面
+    """
     game_manager = st.session_state.game_manager
     require_update = False
     
@@ -51,21 +71,27 @@ def process_game_loop():
         # 执行下一个命令
         success = game_manager.process_next_command()
         require_update = True
-        # update_ui_state()
     
-    # 检查是否有LLM响应
+    # 检查是否有LLM响应需要处理
     if st.session_state.ai_input:
         process_user_input_ai(st.session_state.ai_input)
         st.session_state.ai_input = ""
         require_update = True
-
-    # if game_manager.check_game_over():
-    #     st.session_state.game_over = True
     
     return require_update
 
 def process_user_input_ai(message):
-    """AI处理用户输入"""
+    """AI处理用户输入
+    
+    Args:
+        message: 用户输入的消息
+        
+    流程:
+    1. 获取当前游戏状态
+    2. 记录调试信息
+    3. 生成AI响应
+    4. 更新消息历史
+    """
     # 获取当前游戏状态
     game_state = st.session_state.game_manager.get_game_state()
     
@@ -93,7 +119,19 @@ def process_user_input_ai(message):
     # update_ui_state()
 
 def process_user_input(user_input):
-    """处理用户输入"""
+    """处理用户输入
+    
+    Args:
+        user_input: 用户输入的文本
+        
+    流程:
+    1. 添加用户消息到历史
+    2. 解析用户输入
+    3. 根据输入类型执行相应操作:
+       - 使用卡牌
+       - 攻击
+       - 结束回合
+    """
     with st.spinner("处理中..."):
 
         add_user_message(user_input)
@@ -131,7 +169,13 @@ def process_user_input(user_input):
     # update_ui_state()
 
 def render_game_view():
-    """渲染游戏画面"""
+    """渲染游戏主界面,包括:
+    1. 游戏状态显示
+    2. 玩家/对手信息
+    3. 卡组选择
+    4. 场上卡牌
+    5. 操作按钮
+    """
     # process_game_loop()
     # render_command_progress()
     
@@ -373,7 +417,23 @@ def render_game_controls(gameloop_state):
 
 
 def render_chat_view():
-    """渲染聊天界面"""
+    """渲染聊天界面,包括:
+    1. 对话历史显示
+    2. 用户输入处理
+    3. AI响应展示
+    4. 命令执行进度
+    
+    流程:
+    1. 显示聊天标题
+    2. 获取游戏状态
+    3. 显示对话历史
+    4. 处理游戏循环
+    5. 根据游戏状态显示不同的交互界面:
+       - 欢迎界面: 显示问答输入
+       - 玩家回合: 显示操作界面
+       - 对手回合: 显示AI行动
+    6. 处理状态转换
+    """
     st.header("💬 LLM Card Studio")
     
     # 获取游戏状态
@@ -537,21 +597,28 @@ def render_chat_view():
     st.session_state["last_gameloop_state"] = gameloop_state
 
 def add_user_message(message):
-    """添加用户消息"""
+    """添加用户消息到对话历史"""
     st.session_state.messages.append({"role": "user", "content": message})
 
 def add_assistant_message(message):
-    """添加助手消息"""
+    """添加AI助手消息到对话历史"""
     st.session_state.messages.append({"role": "assistant", "content": message})
 
 def add_user_input_ai(message):
-    """添加用户输入AI"""
+    """处理用户输入:
+    1. 添加到对话历史
+    2. 设置AI输入缓存
+    """
     add_user_message(message)
     st.session_state.ai_input = message
 
 
 def main():
-    """主函数"""
+    """主函数:
+    1. 配置页面布局
+    2. 分割游戏区和聊天区
+    3. 渲染界面
+    """
     # 设置页面配置
     st.set_page_config(
         page_title="🎮 AI卡牌游戏",
