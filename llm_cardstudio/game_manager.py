@@ -145,22 +145,22 @@ class GameManager:
                 
             # 检查是否有足够的法力值
             # think: 检查条件与计算处理放到handle_move_card 或这里?
-            if self.game_state[f'{player_type}_stats']['energy'] < card.get('cost', 0):
-                self.add_game_message("法力值不足")
-                return False
+            # if self.game_state[f'{player_type}_stats']['energy'] < card.get('cost', 0):
+            #     self.add_game_message("法力值不足")
+            #     return False
                 
-            # 扣除法力值
-            self.game_state[f'{player_type}_stats']['energy'] -= card.get('cost', 0)
+            # # 扣除法力值
+            # self.game_state[f'{player_type}_stats']['energy'] -= card.get('cost', 0)
             
             # 添加到场上(使用handle_move_card)
             # self.game_state['hand_cards'][player_type].remove(card)
             # self.game_state['field_cards'][player_type].append(card)
             
-            # 调试日志
-            debug_utils.log("card", "成功使用卡牌", {
-                "card": {"id": card.get("id")},
-                "remaining_energy": self.game_state[f'{player_type}_stats']['energy']
-            })
+            # # 调试日志
+            # debug_utils.log("card", "使用卡牌", {
+            #     "card": {"id": card.get("id")},
+            #     "remaining_energy": self.game_state[f'{player_type}_stats']['energy']
+            # })
             
             # 处理卡牌命令
             # TODO: 如果没有效果指令集,则无法驱动handle_move_card

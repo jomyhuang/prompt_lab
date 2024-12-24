@@ -19,7 +19,9 @@ class CommandProcessor:
             'DESTROY_CARD': self._handle_destroy_card,
             'APPLY_ARMOR': self._handle_apply_armor,
             'TRIGGER_EFFECT': self._handle_trigger_effect,
-            'CHECK_CONDITION': self._handle_check_condition
+            'CHECK_CONDITION': self._handle_check_condition,
+            'APPLY_DAMAGE': self._handle_apply_damage,
+            'CHECK_AND_DESTROY': self._handle_check_and_destroy
         }
         
         self.effect_handlers = {
@@ -77,6 +79,7 @@ class CommandProcessor:
         target_position = params.get('target_position')
         source = params.get('source')
         player_type = params.get('player_type')
+        pay_cost = params.get('pay_cost', source == 'hand' and target_position == 'field')
         
         try:
             # 获取源位置的卡牌列表
@@ -89,14 +92,30 @@ class CommandProcessor:
                 print(f"❌ 找不到卡牌 {player_type}:{card_id}:{source}:{target_position}")
                 return False
             
+            # 检查能量是否足够
+            if pay_cost:
+                energy_cost = card.get('cost', 0)  # 假设卡牌数据中有能量成本字段
+                if player_type == 'player':
+                    if self.game_manager.game_state['player_stats']['energy'] < energy_cost:
+                        self.game_manager.add_game_message(f"❌ 能量不足，无法支付 {energy_cost} 点能量")
+                        return False
+                    self.game_manager.game_state['player_stats']['energy'] -= energy_cost
+                else:
+                    if self.game_manager.game_state['opponent_stats']['energy'] < energy_cost:
+                        self.game_manager.add_game_message(f"❌ 能量不足，无法支付 {energy_cost} 点能量")
+                        return False
+                    self.game_manager.game_state['opponent_stats']['energy'] -= energy_cost
+                print(f"扣除 {energy_cost} 点能量")
+            
             # 移动卡牌
             source_list.remove(card)
             target_list.append(card)
+            
             print("移动卡牌指令处理成功")
             return True
             
         except Exception as e:
-            print(f"移动卡牌失败: {str(e)}")
+            print(f"移动卡牌指令失败: {str(e)}")
             return False
 
     def _handle_animation(self, params: Dict[str, Any]) -> bool:
@@ -320,7 +339,52 @@ class CommandProcessor:
         except Exception as e:
             print(f"触发效果失败: {str(e)}")
             return False
+    def _handle_apply_damage(self, params: Dict[str, Any]) -> bool:
+        """处理伤害应用指令"""
+        attacker_id = params.get('attacker_id')
+        defender_id = params.get('defender_id')
+        damage_type = params.get('damage_type', 'attack')
+        
+        # 获取攻击者卡牌
+        attacker = next((card for card in self.game_manager.game_state['field_cards']['player'] 
+                        if card['id'] == attacker_id), None)
+        if not attacker:
+            return False
+            
+        damage = attacker.get('attack', 0)
+        
+        if defender_id:
+            # 攻击场上的卡牌
+            defender = next((card for card in self.game_manager.game_state['field_cards']['opponent'] 
+                           if card['id'] == defender_id), None)
+            if defender:
+                defender['health'] = defender['health'] - damage
+                self.game_manager.add_game_message(f"🗡️ {attacker['name']} 对 {defender['name']} 造成了 {damage} 点伤害")
+        else:
+            # 直接攻击对手
+            self.game_manager.game_state['opponent_stats']['hp'] -= damage
+            self.game_manager.add_game_message(f"🗡️ {attacker['name']} 对对手造成了 {damage} 点伤害")
+            
+        return True
 
+    def _handle_check_and_destroy(self, params: Dict[str, Any]) -> bool:
+        """检查并处理卡牌销毁"""
+        card_id = params.get('card_id')
+        if not card_id:
+            return False
+            
+        # 检查对手场上的卡牌
+        opponent_field = self.game_manager.game_state['field_cards']['opponent']
+        card = next((card for card in opponent_field if card['id'] == card_id), None)
+        
+        if card and card['health'] <= 0:
+            # 移动到墓地
+            opponent_field.remove(card)
+            self.game_manager.deck_state['opponent']['discard_pile'].append(card)
+            self.game_manager.add_game_message(f"💀 {card['name']} 被摧毁了")
+            
+        return True
+    
     def _handle_check_condition(self, params: Dict[str, Any]) -> bool:
         """处理检查条件指令"""
         print("进入 _handle_check_condition 函数")
