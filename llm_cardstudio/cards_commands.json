@@ -22,8 +22,7 @@
                 "parameters": {
                     "card_id": "card_16",
                     "target_position": "field",
-                    "source": "hand",
-                    "pay_cost": true
+                    "source": "hand"
                 },
                 "duration": 0.5,
                 "sequence": 1
