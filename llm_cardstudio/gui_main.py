@@ -319,6 +319,7 @@ def process_user_input(user_input):
         add_user_message(user_input)
         # 解析用户输入
         action_result = st.session_state.llm_interaction.parse_user_action(user_input)
+        game_state = st.session_state.game_manager.get_game_state()
         
         # 如果是开始游戏的操作
         if game_state["gameloop_state"] == "welcome" and "开始" in user_input and "游戏" in user_input:
