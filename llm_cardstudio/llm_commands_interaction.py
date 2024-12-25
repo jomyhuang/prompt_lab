@@ -3,7 +3,7 @@ from typing import Dict, List, Any, Tuple, Optional
 import time
 import os
 from debug_utils import debug_utils
-
+import asyncio
 
 class CommandProcessor:
     def __init__(self, game_manager):
@@ -613,58 +613,7 @@ class CommandProcessor:
             print(error_message)
             # self.game_manager.add_game_message(error_message)
             return False
-
-    def process_attack_commands(self, attacker_card: dict, target_card: dict = None, player_type: str = "player") -> bool:
-        """处理攻击命令序列"""
-        try:
-            command_sequence = []
-            
-            # 1. 选择攻击者
-            command_sequence.append({
-                "action": "SELECT_ATTACKER",
-                "parameters": {
-                    "card_id": attacker_card.get("id"),
-                    "player_type": player_type
-                },
-                "duration": 0.5
-            })
-            
-            # 2. 如果有目标卡牌，选择目标
-            if target_card:
-                command_sequence.append({
-                    "action": "SELECT_TARGET",
-                    "parameters": {
-                        "card_id": target_card.get("id"),
-                        "player_type": "opponent" if player_type == "player" else "player"
-                    },
-                    "duration": 0.5
-                })
-            
-            # 3. 执行攻击
-            command_sequence.append({
-                "action": "PERFORM_ATTACK",
-                "parameters": {
-                    "attacker_id": attacker_card.get("id"),
-                    "target_id": target_card.get("id") if target_card else None,
-                    "player_type": player_type
-                },
-                "duration": 1.0
-            })
-            
-            # 启动命令序列
-            if command_sequence:
-                self.game_manager.start_command_sequence(command_sequence)
-            
-            return True
-            
-        except Exception as e:
-            debug_utils.log("game", "处理攻击命令出错", {
-                "错误": str(e),
-                "攻击者": attacker_card.get("id"),
-                "目标": target_card.get("id") if target_card else None
-            })
-            return False
-            
+    
     def _handle_select_attacker(self, params: Dict[str, Any]) -> bool:
         """处理选择攻击者指令"""
         print("进入 _handle_select_attacker 函数")
@@ -849,3 +798,109 @@ class CommandProcessor:
             
         return True
 
+    # async def async_process_attack_commands(self, attacker_card: dict, target_card: dict = None, player_type: str = "player") -> bool:
+    #     """处理攻击命令序列"""
+    #     try:
+    #         command_sequence = []
+            
+    #         # 1. 选择攻击者
+    #         command_sequence.append({
+    #             "action": "SELECT_ATTACKER",
+    #             "parameters": {
+    #                 "card_id": attacker_card.get("id"),
+    #                 "player_type": player_type
+    #             },
+    #             "duration": 0.5
+    #         })
+            
+    #         # 2. 如果有目标卡牌，选择目标
+    #         if target_card:
+    #             command_sequence.append({
+    #                 "action": "SELECT_TARGET",
+    #                 "parameters": {
+    #                     "card_id": target_card.get("id"),
+    #                     "player_type": "opponent" if player_type == "player" else "player"
+    #                 },
+    #                 "duration": 0.5
+    #             })
+            
+    #         # 3. 执行攻击
+    #         command_sequence.append({
+    #             "action": "PERFORM_ATTACK",
+    #             "parameters": {
+    #                 "attacker_id": attacker_card.get("id"),
+    #                 "target_id": target_card.get("id") if target_card else None,
+    #                 "player_type": player_type
+    #             },
+    #             "duration": 1.0
+    #         })
+            
+    #         # 启动命令序列
+    #         if command_sequence:
+    #             for command in command_sequence:
+    #                 success = self.process_single_command(command)
+    #                 await asyncio.sleep(1.5) 
+    #                 if not success:
+    #                     return False
+            
+    #         return True
+            
+    #     except Exception as e:
+    #         debug_utils.log("game", "处理攻击命令出错", {
+    #             "错误": str(e),
+    #             "攻击者": attacker_card.get("id"),
+    #             "目标": target_card.get("id") if target_card else None
+    #         })
+    #         return False
+        
+    # def process_attack_commands(self, attacker_card: dict, target_card: dict = None, player_type: str = "player") -> bool:
+    #     """处理攻击命令序列"""
+    #     try:
+    #         command_sequence = []
+            
+    #         # 1. 选择攻击者
+    #         command_sequence.append({
+    #             "action": "SELECT_ATTACKER",
+    #             "parameters": {
+    #                 "card_id": attacker_card.get("id"),
+    #                 "player_type": player_type
+    #             },
+    #             "duration": 0.5
+    #         })
+            
+    #         # 2. 如果有目标卡牌，选择目标
+    #         if target_card:
+    #             command_sequence.append({
+    #                 "action": "SELECT_TARGET",
+    #                 "parameters": {
+    #                     "card_id": target_card.get("id"),
+    #                     "player_type": "opponent" if player_type == "player" else "player"
+    #                 },
+    #                 "duration": 0.5
+    #             })
+            
+    #         # 3. 执行攻击
+    #         command_sequence.append({
+    #             "action": "PERFORM_ATTACK",
+    #             "parameters": {
+    #                 "attacker_id": attacker_card.get("id"),
+    #                 "target_id": target_card.get("id") if target_card else None,
+    #                 "player_type": player_type
+    #             },
+    #             "duration": 1.0
+    #         })
+            
+    #         # 启动命令序列
+    #         if command_sequence:
+    #             self.game_manager.start_command_sequence(command_sequence)
+            
+    #         return True
+            
+    #     except Exception as e:
+    #         debug_utils.log("game", "处理攻击命令出错", {
+    #             "错误": str(e),
+    #             "攻击者": attacker_card.get("id"),
+    #             "目标": target_card.get("id") if target_card else None
+    #         })
+    #         return False
+            

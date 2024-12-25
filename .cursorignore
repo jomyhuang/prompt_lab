@@ -14,11 +14,8 @@ env/
 .env/
 
 # 忽略特定文件夹
-./examples/
-./examples/simple01/
-./examples/simple02/
-./examples/simple03/
-
+examples/
+z_examples/
 
 
 # 忽略特定文件类型

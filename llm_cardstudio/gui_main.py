@@ -10,6 +10,7 @@ import json
 import time
 from datetime import datetime
 from typing import List, Dict
+import asyncio
 
 # 初始化全局session state
 if 'initialized' not in st.session_state:
@@ -345,6 +346,11 @@ def process_user_input(user_input):
                 target_card = st.session_state.card_selection["target_card"]
                 if selected_card:
                     target_id = target_card["id"] if isinstance(target_card, dict) else target_card
+                    # success_attack = asyncio.run( st.session_state.game_manager.async_perform_attack(
+                    #     attacker_card_id=selected_card["id"],
+                    #     target_card_id=target_id,
+                    #     player_type="player"
+                    # ) )
                     success_attack = st.session_state.game_manager.perform_attack(
                         attacker_card_id=selected_card["id"],
                         target_card_id=target_id,

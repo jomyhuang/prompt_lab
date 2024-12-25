@@ -6,6 +6,7 @@ import streamlit as st
 from typing import Dict, List, Any, Tuple
 from re import T
 from debug_utils import debug_utils
+import asyncio
 
 class GameManager:
     def __init__(self):
@@ -848,3 +849,95 @@ class GameManager:
         total = len(self.command_sequence['commands'])
         current = self.command_sequence['current_index']
         return current, total
+    
+    # async def async_perform_attack(self, attacker_card_id: str, target_card_id: str = None, player_type: str = "player") -> bool:
+    #     """执行攻击动作
+        
+    #     Args:
+    #         attacker_card_id: 攻击者卡牌ID
+    #         target_card_id: 目标卡牌ID，如果为None或为"opponent_hero"则直接攻击对手
+    #         player_type: 攻击方，可选值："player" 或 "opponent"
+            
+    #     Returns:
+    #         bool: 攻击是否成功执行
+    #     """
+    #     # 检查是否是第一回合
+    #     if self.game_state["turn_info"]["current_turn"] == 1:
+    #         self.add_game_message("❌ 第一回合不能进行攻击")
+    #         return False
+            
+    #     # 检查是否已经攻击过
+    #     if player_type == "player" and self.game_state.get("has_attacked_this_turn", False):
+    #         self.add_game_message("❌ 本回合已经攻击过了")
+    #         return False
+            
+    #     # 获取攻击者卡牌
+    #     attacker_field = self.game_state["field_cards"][player_type]
+    #     attacker_card = next((card for card in attacker_field if card["id"] == attacker_card_id), None)
+    #     if not attacker_card:
+    #         self.add_game_message("❌ 找不到指定的攻击者卡牌")
+    #         return False
+            
+    #     # 获取目标卡牌（如果有）
+    #     target_card = None
+    #     if target_card_id and target_card_id != "opponent_hero":
+    #         opponent_type = "opponent" if player_type == "player" else "player"
+    #         opponent_field = self.game_state["field_cards"][opponent_type]
+    #         target_card = next((card for card in opponent_field if card["id"] == target_card_id), None)
+    #         if not target_card:
+    #             self.add_game_message("❌ 找不到指定的目标卡牌")
+    #             return False
+
+    #     # 构建攻击命令序列
+    #     command_sequence = []
+        
+    #     # 1. 选择攻击者
+    #     command_sequence.append({
+    #         "action": "SELECT_ATTACKER",
+    #         "parameters": {
+    #             "card_id": attacker_card["id"],
+    #             "player_type": player_type
+    #         },
+    #         "duration": 0.5
+    #     })
+        
+    #     # 2. 如果有目标卡牌，选择目标
+    #     if target_card:
+    #         command_sequence.append({
+    #             "action": "SELECT_TARGET",
+    #             "parameters": {
+    #                 "card_id": target_card["id"],
+    #                 "target_type": "opponent" if player_type == "player" else "player"
+    #             },
+    #             "duration": 0.5
+    #         })
+    #     else:
+    #         # 直接攻击英雄
+    #         command_sequence.append({
+    #             "action": "SELECT_TARGET",
+    #             "parameters": {
+    #                 "target_type": "opponent_hero"
+    #             },
+    #             "duration": 0.5
+    #         })
+        
+    #     # 3. 执行攻击
+    #     command_sequence.append({
+    #         "action": "PERFORM_ATTACK",
+    #         "parameters": {
+    #             "attacker_id": attacker_card["id"],
+    #             "target_id": target_card["id"] if target_card else None,
+    #             "player_type": player_type
+    #         },
+    #         "duration": 1.0
+    #     })
+        
+    #     if command_sequence:
+    #         for command in command_sequence:
+    #             success = await self.commands_processor.process_single_command(command)
+    #             #  asyncio.sleep(1.5) 
+    #             self.add_game_message(f"执行命令: {command['action']}")
+    #             if not success:
+    #                 return False
+                
+    #     return True
