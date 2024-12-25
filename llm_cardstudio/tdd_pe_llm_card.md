@@ -1,8 +1,4 @@
 
-TAG02 TODO:
-直接呼叫 _handle_command ? (command template)
-攻击 select_target
-
 
 1.在 gui_main.py 中增加攻击UI, 进入呼叫perform_attack前, 如果没有指定的攻击者,或是没有指定的目标,则激活UI进入选择攻击者或是选择目标
 在render_chat_view 对话框下方的攻击按钮,按下后,

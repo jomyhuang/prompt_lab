@@ -24,7 +24,9 @@ class CommandProcessor:
             'CHECK_CONDITION': self._handle_check_condition,
             'SELECT_ATTACKER': self._handle_select_attacker,
             'SELECT_TARGET': self._handle_select_target,
-            'PERFORM_ATTACK': self._handle_perform_attack
+            'PERFORM_ATTACK': self._handle_perform_attack,
+            'APPLY_DAMAGE': self._handle_apply_damage,
+            'CHECK_AND_DESTROY': self._handle_check_and_destroy
         }
         
         self.effect_handlers = {
@@ -800,4 +802,50 @@ class CommandProcessor:
             
         except Exception as e:
             print(f"移动卡牌到墓地失败: {str(e)}")
+
+    def _handle_apply_damage(self, params: Dict[str, Any]) -> bool:
+        """处理伤害应用指令"""
+        attacker_id = params.get('attacker_id')
+        defender_id = params.get('defender_id')
+        damage_type = params.get('damage_type', 'attack')
+        
+        # 获取攻击者卡牌
+        attacker = next((card for card in self.game_manager.game_state['field_cards']['player'] 
+                        if card['id'] == attacker_id), None)
+        if not attacker:
+            return False
+            
+        damage = attacker.get('attack', 0)
+        
+        if defender_id:
+            # 攻击场上的卡牌
+            defender = next((card for card in self.game_manager.game_state['field_cards']['opponent'] 
+                           if card['id'] == defender_id), None)
+            if defender:
+                defender['health'] = defender['health'] - damage
+                self.game_manager.add_game_message(f"🗡️ {attacker['name']} 对 {defender['name']} 造成了 {damage} 点伤害")
+        else:
+            # 直接攻击对手
+            self.game_manager.game_state['opponent_stats']['hp'] -= damage
+            self.game_manager.add_game_message(f"🗡️ {attacker['name']} 对对手造成了 {damage} 点伤害")
+            
+        return True
+
+    def _handle_check_and_destroy(self, params: Dict[str, Any]) -> bool:
+        """检查并处理卡牌销毁"""
+        card_id = params.get('card_id')
+        if not card_id:
+            return False
+            
+        # 检查对手场上的卡牌
+        opponent_field = self.game_manager.game_state['field_cards']['opponent']
+        card = next((card for card in opponent_field if card['id'] == card_id), None)
+        
+        if card and card['health'] <= 0:
+            # 移动到墓地
+            opponent_field.remove(card)
+            self.game_manager.deck_state['opponent']['discard_pile'].append(card)
+            self.game_manager.add_game_message(f"💀 {card['name']} 被摧毁了")
+            
+        return True
 
