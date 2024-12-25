@@ -1,15 +1,7 @@
-"""
-LLM交互模块,负责:
-1. 与大语言模型的交互
-2. 用户输入的解析
-3. AI响应的生成
-4. 对话历史管理
-"""
-
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
-from langchain.chains import LLMChain
+from langchain.chains import LLMChain  # 修复导入路径
 import google.generativeai as genai
 import os
 from dotenv import load_dotenv
@@ -84,26 +76,25 @@ os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY")
 
 class LLMInteraction:
     def __init__(self):
-        """初始化LLM交互模块:
-        1. 配置LLM模型
-        2. 初始化对话历史
-        3. 设置提示模板
-        4. 创建LLM链
-        """
-        # 初始化Gemini模型
-        self.llm = ChatGoogleGenerativeAI(
-            api_key=os.getenv("GOOGLE_API_KEY"),
-            model=os.getenv("GOOGLE_MODEL_NAME", "gemini-pro"),  # 从环境变量读取模型名称
-            temperature=0.7,  # 控制输出的随机性
-            streaming=True  # 启用流式输出
-        )
-        # self.llm = ChatOpenAI(
-        #     api_key=os.getenv("OPENAI_API_KEY"),
-        #     model=os.getenv("OPENAI_MODEL_NAME", "gpt-4o"),  # 从环境变量读取模型名称，默认为gpt-4o
-        #     base_url=os.getenv("OPENAI_API_BASE"),
-        #     temperature=0.7,
-        #     streaming=True
-        # )
+        if False:
+            # 初始化Gemini模型
+            self.llm = ChatGoogleGenerativeAI(
+                api_key=os.getenv("GOOGLE_API_KEY"),
+                model=os.getenv("GOOGLE_MODEL_NAME", "gemini-pro"),  # 从环境变量读取模型名称，默认为gemini-pro
+                temperature=0.7,
+                streaming=True
+            )
+            print("使用Gemini模型")
+        else:
+            # 初始化OpenAI模型
+            self.llm = ChatOpenAI(
+                api_key=os.getenv("OPENAI_API_KEY"),
+            model=os.getenv("OPENAI_MODEL_NAME", "gpt-4o"),  # 从环境变量读取模型名称，默认为gpt-4o
+            base_url=os.getenv("OPENAI_API_BASE"),
+            temperature=0.7,
+                streaming=True
+            )
+            print("使用OpenAI API模型")
 
         # 初始化对话历史
         self.chat_history = []
@@ -126,7 +117,8 @@ class LLMInteraction:
         
         # 使用新的 LLMChain API
         self.context_prompt = ChatPromptTemplate.from_template(context_template)
-        self.context_chain = self.context_prompt | self.llm
+        # self.context_chain = LLMChain(llm=self.llm, prompt=self.context_prompt)
+        self.context_chain = self.context_prompt | self.llm        
 
         # 初始化动作解析提示模板
         action_template = """你是一个游戏助手，负责解析玩家的行动。
@@ -136,69 +128,48 @@ class LLMInteraction:
         请解析玩家的意图并给出建议。
         """
         self.action_prompt = ChatPromptTemplate.from_template(action_template)
-        self.action_chain = self.action_prompt | self.llm
+        # self.action_chain = LLMChain(llm=self.llm, prompt=self.action_prompt)
+        
+        self.action_chain = self.action_prompt | self.llm  # action_chain 使用 | 运算符
+        
 
         # 初始化AI响应提示模板
         self.ai_response_prompt = ChatPromptTemplate.from_messages([
             ("system", "你是一个游戏助手，负责分析游戏状态并给出建议。"),
             ("human", "{game_state}")
         ])
-        self.ai_response_chain = self.ai_response_prompt | self.llm
+        # self.ai_response_chain = LLMChain(llm=self.llm, prompt=self.ai_response_prompt)
+        self.ai_response_chain = self.ai_response_prompt | self.llm 
+    
     
     def format_history(self):
-        """格式化聊天历史
-        只保留最近5条记录,避免历史记录过长
-        """
+        """格式化聊天历史"""
         formatted = []
         for entry in self.chat_history[-5:]:  # 只保留最近5条记录
             formatted.append(f"{entry['role']}: {entry['content']}")
         return "\n".join(formatted)
     
     def add_to_history(self, role, content):
-        """添加消息到历史记录
-        
-        Args:
-            role: 消息角色(user/assistant)
-            content: 消息内容
-            
-        Note:
-            限制历史记录长度为10条
-        """
+        """添加消息到历史记录"""
         self.chat_history.append({"role": role, "content": content})
         if len(self.chat_history) > 10:  # 限制历史记录长度
             self.chat_history.pop(0)
     
     def parse_user_action(self, user_input):
-        """解析用户输入
-        
-        Args:
-            user_input: 用户输入的文本
-            
-        Returns:
-            str: 解析后的用户输入
-            
-        Note:
-            目前是简单返回,后续可添加更复杂的解析逻辑
-        """
+        """解析用户输入"""
         # 添加用户输入到历史记录
         self.add_to_history("user", user_input)
-        return user_input
+        return user_input  # 简单返回用户输入，后续可以添加更复杂的解析逻辑
     
     def generate_ai_response(self, user_input, game_state):
         """生成AI响应
         
         Args:
-            user_input: 用户输入
-            game_state: 当前游戏状态
+            user_input (str): 用户输入
+            game_state (dict): 当前游戏状态
             
         Returns:
             str: AI的响应
-            
-        流程:
-        1. 更新游戏状态
-        2. 准备上下文数据
-        3. 使用LLM生成响应
-        4. 更新对话历史
         """
         # 更新游戏状态
         self.last_game_state = game_state
@@ -214,6 +185,7 @@ class LLMInteraction:
             # 使用 LLMChain 生成响应
             response = self.context_chain.invoke(context_data)
             ai_message = response   #直接返回字符串无需使用 response["text"]
+            # ai_message = response["text"]
             
             # 更新对话历史
             self.chat_history.append({"role": "user", "content": user_input})

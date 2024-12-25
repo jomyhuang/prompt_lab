@@ -2,6 +2,8 @@ import json
 from typing import Dict, List, Any, Tuple, Optional
 import time
 import os
+from debug_utils import debug_utils
+
 
 class CommandProcessor:
     def __init__(self, game_manager):
@@ -20,8 +22,9 @@ class CommandProcessor:
             'APPLY_ARMOR': self._handle_apply_armor,
             'TRIGGER_EFFECT': self._handle_trigger_effect,
             'CHECK_CONDITION': self._handle_check_condition,
-            'APPLY_DAMAGE': self._handle_apply_damage,
-            'CHECK_AND_DESTROY': self._handle_check_and_destroy
+            'SELECT_ATTACKER': self._handle_select_attacker,
+            'SELECT_TARGET': self._handle_select_target,
+            'PERFORM_ATTACK': self._handle_perform_attack
         }
         
         self.effect_handlers = {
@@ -339,52 +342,7 @@ class CommandProcessor:
         except Exception as e:
             print(f"触发效果失败: {str(e)}")
             return False
-    def _handle_apply_damage(self, params: Dict[str, Any]) -> bool:
-        """处理伤害应用指令"""
-        attacker_id = params.get('attacker_id')
-        defender_id = params.get('defender_id')
-        damage_type = params.get('damage_type', 'attack')
-        
-        # 获取攻击者卡牌
-        attacker = next((card for card in self.game_manager.game_state['field_cards']['player'] 
-                        if card['id'] == attacker_id), None)
-        if not attacker:
-            return False
-            
-        damage = attacker.get('attack', 0)
-        
-        if defender_id:
-            # 攻击场上的卡牌
-            defender = next((card for card in self.game_manager.game_state['field_cards']['opponent'] 
-                           if card['id'] == defender_id), None)
-            if defender:
-                defender['health'] = defender['health'] - damage
-                self.game_manager.add_game_message(f"🗡️ {attacker['name']} 对 {defender['name']} 造成了 {damage} 点伤害")
-        else:
-            # 直接攻击对手
-            self.game_manager.game_state['opponent_stats']['hp'] -= damage
-            self.game_manager.add_game_message(f"🗡️ {attacker['name']} 对对手造成了 {damage} 点伤害")
-            
-        return True
 
-    def _handle_check_and_destroy(self, params: Dict[str, Any]) -> bool:
-        """检查并处理卡牌销毁"""
-        card_id = params.get('card_id')
-        if not card_id:
-            return False
-            
-        # 检查对手场上的卡牌
-        opponent_field = self.game_manager.game_state['field_cards']['opponent']
-        card = next((card for card in opponent_field if card['id'] == card_id), None)
-        
-        if card and card['health'] <= 0:
-            # 移动到墓地
-            opponent_field.remove(card)
-            self.game_manager.deck_state['opponent']['discard_pile'].append(card)
-            self.game_manager.add_game_message(f"💀 {card['name']} 被摧毁了")
-            
-        return True
-    
     def _handle_check_condition(self, params: Dict[str, Any]) -> bool:
         """处理检查条件指令"""
         print("进入 _handle_check_condition 函数")
@@ -634,7 +592,7 @@ class CommandProcessor:
             if not success:
                 error_message = f"❌ 执行命令失败: {action}"
                 print(error_message)
-                self.game_manager.add_game_message(error_message)
+                # self.game_manager.add_game_message(error_message)
                 return False
                 
             # 处理持续时间
@@ -653,4 +611,193 @@ class CommandProcessor:
             print(error_message)
             # self.game_manager.add_game_message(error_message)
             return False
+
+    def process_attack_commands(self, attacker_card: dict, target_card: dict = None, player_type: str = "player") -> bool:
+        """处理攻击命令序列"""
+        try:
+            command_sequence = []
+            
+            # 1. 选择攻击者
+            command_sequence.append({
+                "action": "SELECT_ATTACKER",
+                "parameters": {
+                    "card_id": attacker_card.get("id"),
+                    "player_type": player_type
+                },
+                "duration": 0.5
+            })
+            
+            # 2. 如果有目标卡牌，选择目标
+            if target_card:
+                command_sequence.append({
+                    "action": "SELECT_TARGET",
+                    "parameters": {
+                        "card_id": target_card.get("id"),
+                        "player_type": "opponent" if player_type == "player" else "player"
+                    },
+                    "duration": 0.5
+                })
+            
+            # 3. 执行攻击
+            command_sequence.append({
+                "action": "PERFORM_ATTACK",
+                "parameters": {
+                    "attacker_id": attacker_card.get("id"),
+                    "target_id": target_card.get("id") if target_card else None,
+                    "player_type": player_type
+                },
+                "duration": 1.0
+            })
+            
+            # 启动命令序列
+            if command_sequence:
+                self.game_manager.start_command_sequence(command_sequence)
+            
+            return True
+            
+        except Exception as e:
+            debug_utils.log("game", "处理攻击命令出错", {
+                "错误": str(e),
+                "攻击者": attacker_card.get("id"),
+                "目标": target_card.get("id") if target_card else None
+            })
+            return False
+            
+    def _handle_select_attacker(self, params: Dict[str, Any]) -> bool:
+        """处理选择攻击者指令"""
+        print("进入 _handle_select_attacker 函数")
+        
+        player_type = params.get('player_type', 'player')
+        card_id = params.get('card_id')
+        
+        try:
+            # 获取场上的卡牌
+            field_cards = self.game_manager.game_state['field_cards'][player_type]
+            
+            # 检查是否有可用的攻击者
+            if not field_cards:
+                self.game_manager.add_game_message("❌ 场上没有可用的攻击者")
+                return False
+                
+            # 查找指定的卡牌
+            attacker = next((c for c in field_cards if c['id'] == card_id), None)
+            if not attacker:
+                self.game_manager.add_game_message(f"❌ 找不到指定的攻击者卡牌")
+                return False
+                
+            # 设置当前选中的攻击者
+            self.game_manager.game_state['selected_attacker'] = attacker
+            self.game_manager.add_game_message(f"✅ 选择了攻击者: {attacker.get('name', '未知卡牌')}")
+            return True
+            
+        except Exception as e:
+            print(f"选择攻击者失败: {str(e)}")
+            return False
+
+    def _handle_select_target(self, params: Dict[str, Any]) -> bool:
+        """处理选择攻击目标指令"""
+        print("进入 _handle_select_target 函数")
+        
+        target_type = params.get('target_type', 'opponent')  # opponent 或 opponent_hero
+        card_id = params.get('card_id')  # 如果攻击英雄则不需要
+        
+        try:
+            # 检查是否已选择攻击者
+            attacker = self.game_manager.game_state.get('selected_attacker')
+            if not attacker:
+                self.game_manager.add_game_message("❌ 请先选择攻击者")
+                return False
+            
+            if target_type == 'opponent_hero':
+                # 直接攻击英雄
+                self.game_manager.game_state['selected_target'] = {
+                    'type': 'hero',
+                    'owner': 'opponent'
+                }
+                self.game_manager.add_game_message("✅ 选择了攻击目标: 对手英雄")
+                return True
+            else:
+                # 攻击场上的卡牌
+                field_cards = self.game_manager.game_state['field_cards'][target_type]
+                target = next((c for c in field_cards if c['id'] == card_id), None)
+                
+                if not target:
+                    self.game_manager.add_game_message(f"❌ 找不到指定的目标卡牌")
+                    return False
+                    
+                self.game_manager.game_state['selected_target'] = target
+                self.game_manager.add_game_message(f"✅ 选择了攻击目标: {target.get('name', '未知卡牌')}")
+                return True
+                
+        except Exception as e:
+            print(f"选择攻击目标失败: {str(e)}")
+            return False
+
+    def _handle_perform_attack(self, params: Dict[str, Any]) -> bool:
+        """处理执行攻击指令"""
+        print("进入 _handle_perform_attack 函数")
+        
+        try:
+            # 获取攻击者和目标
+            attacker = self.game_manager.game_state.get('selected_attacker')
+            target = self.game_manager.game_state.get('selected_target')
+            
+            if not attacker or not target:
+                self.game_manager.add_game_message("❌ 请先选择攻击者和目标")
+                return False
+            
+            # 计算伤害
+            damage = attacker.get('attack', 0)
+            
+            if target['type'] == 'hero':
+                # 直接攻击英雄
+                opponent_stats = self.game_manager.game_state['opponent_stats']
+                opponent_stats['hp'] = max(0, opponent_stats['hp'] - damage)
+                self.game_manager.add_game_message(f"⚔️ {attacker.get('name', '未知卡牌')} 对对手英雄造成了 {damage} 点伤害")
+                
+                # 检查游戏是否结束
+                if opponent_stats['hp'] <= 0:
+                    self.game_manager.add_game_message("🎉 游戏结束，你获得了胜利！")
+                    self.game_manager.game_state['gameloop_state'] = 'game_over'
+            else:
+                # 攻击卡牌
+                target_hp = target.get('health', 0)
+                target_attack = target.get('attack', 0)
+                
+                # 双方互相造成伤害
+                target['health'] = target_hp - damage
+                attacker['health'] = attacker.get('health', 0) - target_attack
+                
+                self.game_manager.add_game_message(f"⚔️ {attacker.get('name', '未知卡牌')} 与 {target.get('name', '未知卡牌')} 进行了战斗")
+                
+                # 检查卡牌是否死亡
+                if target['health'] <= 0:
+                    self._move_to_graveyard(target, 'opponent')
+                if attacker['health'] <= 0:
+                    self._move_to_graveyard(attacker, 'player')
+            
+            # 清除选择状态
+            self.game_manager.game_state.pop('selected_attacker', None)
+            self.game_manager.game_state.pop('selected_target', None)
+            
+            return True
+            
+        except Exception as e:
+            print(f"执行攻击失败: {str(e)}")
+            return False
+
+    def _move_to_graveyard(self, card: Dict[str, Any], owner: str):
+        """将卡牌移动到墓地"""
+        try:
+            # 从场上移除卡牌
+            field_cards = self.game_manager.game_state['field_cards'][owner]
+            if card in field_cards:
+                field_cards.remove(card)
+            
+            # 添加到弃牌堆
+            self.game_manager.deck_state[owner]['discard_pile'].append(card)
+            self.game_manager.add_game_message(f"💀 {card.get('name', '未知卡牌')} 被击败，进入了墓地")
+            
+        except Exception as e:
+            print(f"移动卡牌到墓地失败: {str(e)}")
 

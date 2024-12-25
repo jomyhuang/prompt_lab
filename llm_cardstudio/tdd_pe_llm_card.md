@@ -1,7 +1,52 @@
 
+TAG02 TODO:
+直接呼叫 _handle_command ? (command template)
+攻击 select_target
+
+
+1.在 gui_main.py 中增加攻击UI, 进入呼叫perform_attack前, 如果没有指定的攻击者,或是没有指定的目标,则激活UI进入选择攻击者或是选择目标
+在render_chat_view 对话框下方的攻击按钮,按下后,
+在下方,使用selectbox选择我方场上的卡牌,选择敌方场上的卡牌
+按下确认攻击键, 通过user_input 激活 perform_attack
+2. 修改perform_attack 参考 play_card 使用命令序列模式
+3. 增加 perform_attack 的命令序列在 llm_commands_interaction.py 中
+3-1. perform_attack开始进入attack,并执行命令序列
+4. 命令序列如下
+4-1.检查我方场上的卡牌(如果没有,则无法攻击),选择敌方场上的卡牌(如果没有,跳过该指令则直接攻击对手伤害)
+4-2. 将伤害的卡牌移动到墓地,计算对手伤害
+5. 结束攻击, 回到action阶段玩家后续行动
 
 
 
+
+
+
+        self.command_handlers = {
+            'MOVE_CARD': self._handle_move_card,
+            'PLAY_ANIMATION': self._handle_animation,
+            'UPDATE_HEALTH': self._handle_update_health,
+            'SHOW_MESSAGE': self._handle_show_message,
+            'CREATE_CARD': self._handle_create_card,
+            'APPLY_EFFECT': self._handle_apply_effect,
+            'UPDATE_STATS': self._handle_update_stats,
+            'DRAW_CARD': self._handle_draw_card,
+            'DESTROY_CARD': self._handle_destroy_card,
+            'APPLY_ARMOR': self._handle_apply_armor,
+            'TRIGGER_EFFECT': self._handle_trigger_effect,
+            'CHECK_CONDITION': self._handle_check_condition
+        }
+        
+        self.effect_handlers = {
+            'battlecry': self._handle_battlecry,
+            'deathrattle': self._handle_deathrattle,
+            'taunt': self._handle_taunt,
+            'charge': self._handle_charge,
+            'spell_damage': self._handle_spell_damage,
+            'adjacent_effect': self._handle_adjacent_effect,
+            'conditional_effect': self._handle_conditional_effect,
+            'armor_gain': self._handle_armor_gain,
+            'card_draw': self._handle_card_draw
+        }
 
 卡牌操作：
 CREATE_CARD {card_id, owner, position}: 创建一张卡牌。
