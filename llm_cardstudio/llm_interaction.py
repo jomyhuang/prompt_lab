@@ -161,7 +161,7 @@ class LLMInteraction:
         self.add_to_history("user", user_input)
         return user_input  # 简单返回用户输入，后续可以添加更复杂的解析逻辑
     
-    def generate_ai_response(self, user_input, game_state):
+    async def generate_ai_response(self, user_input, game_state):
         """生成AI响应
         
         Args:

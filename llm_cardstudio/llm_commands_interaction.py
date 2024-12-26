@@ -476,144 +476,6 @@ class CommandProcessor:
                 
         return None
 
-    def process_card_commands(self, card_id: str, card: dict, player_type: str, phase: str = "phase_playcard") -> bool:
-        """处理卡牌命令序列
-
-        Args:
-            card_id: 卡牌ID
-            card: 卡牌数据
-            player_type: 玩家类型
-            phase: 执行阶段，如 phase_playcard, phase_battlecry, phase_deathrattle 等
-
-        Returns:
-            bool: 是否成功执行所有命令
-        """
-        try:
-            # 查找卡牌命令配置 (优先查找特定 card_id)
-            card_commands = next(
-                (cmd for cmd in self.commands_config if str(cmd.get("card_id", "")) == str(card_id)),
-                None
-            )
-
-            #如果找不到特定卡牌的命令配置，则查找 card_id 为 "all" 的默认配置
-            if not card_commands:
-                card_commands = next(
-                    (cmd for cmd in self.commands_config if str(cmd.get("card_id", "")) == "all"),
-                    None
-                )
-            
-            if not card_commands:
-                print(f"❌ 找不到卡牌命令配置: {card_id} 或 默认 all 配置")
-                return False
-
-
-            # 获取指定阶段的命令列表
-            phase_key = f"{phase}_instructions"
-            phase_commands = card_commands.get(phase_key, [])
-
-            if not phase_commands:
-                print(f"⚠️ 卡牌 {card_id} (或默认 all ) 在 {phase} 阶段没有命令")
-                return True  # 没有命令也是正常的
-
-            # 按序号排序命令
-            sorted_commands = sorted(phase_commands, key=lambda x: x.get("sequence", 0))
-
-            # 构建命令序列
-            command_sequence = []
-            for command in sorted_commands:
-                # 获取命令信息
-                action = command.get("action")
-                parameters = command.get("parameters", {}).copy()  # 创建参数的副本
-                duration = command.get("duration", 0)
-
-                # 确保参数中的卡牌ID与当前卡牌一致
-                if "card_id" in parameters:
-                    parameters["card_id"] = str(card_id)
-
-                # 添加玩家类型到参数中
-                parameters["player_type"] = player_type
-
-                # 添加到命令序列
-                command_sequence.append({
-                    "action": action,
-                    "parameters": parameters,
-                    "duration": duration
-                })
-
-                # 输出命令信息
-                print(
-                    f"添加到命令序列: {action} ({phase})\n"
-                    f"参数: {json.dumps(parameters, ensure_ascii=False, indent=2)}"
-                )
-
-            # 启动命令序列
-            if command_sequence:
-                self.game_manager.start_command_sequence(command_sequence)
-
-            return True
-
-        except Exception as e:
-            debug_utils.log("game", "处理卡牌命令出错", {
-            "错误": str(e),
-            "阶段": phase,
-            "卡牌ID": card_id
-        })
-            return False
-
-    def process_single_command(self, command: Dict[str, Any]) -> bool:
-        """处理单个命令
-        
-        Args:
-            command: 命令数据，包含 action、parameters 和 duration
-            
-        Returns:
-            bool: 命令是否执行成功
-        """
-        try:
-            action = command.get('action')
-            parameters = command.get('parameters', {})
-            duration = command.get('duration', 0)
-            
-            # 输出命令信息
-            debug_message = (
-                f"执行命令: {action}\n"
-                f"参数: {json.dumps(parameters, ensure_ascii=False, indent=2)}"
-            )
-            print(debug_message)
-            # self.game_manager.add_game_message(debug_message)
-            
-            # 执行命令
-            handler = self.command_handlers.get(action)
-            if not handler:
-                error_message = f"❌ 未知命令: {action}"
-                print(error_message)
-                self.game_manager.add_game_message(error_message)
-                return False
-                
-            success = handler(parameters)
-            if not success:
-                error_message = f"❌ 执行命令失败: {action}"
-                print(error_message)
-                # self.game_manager.add_game_message(error_message)
-                return False
-                
-            # 处理持续时间
-            if duration > 0:
-                time.sleep(duration)
-            
-            # 添加成功消息
-            success_message = f"✅ 命令执行成功: {action}"
-            print(success_message)
-            # self.game_manager.add_game_message(success_message)
-            
-            return True
-            
-        except Exception as e:
-            error_message = f"❌ 命令执行出错: {str(e)}"
-            print(error_message)
-            # self.game_manager.add_game_message(error_message)
-            return False
-    
     def _handle_select_attacker(self, params: Dict[str, Any]) -> bool:
         """处理选择攻击者指令"""
         print("进入 _handle_select_attacker 函数")
@@ -797,110 +659,196 @@ class CommandProcessor:
             self.game_manager.add_game_message(f"💀 {card['name']} 被摧毁了")
             
         return True
+    
+    def process_card_commands(self, card_id: str, card: dict, player_type: str, phase: str = "phase_playcard") -> bool:
+        """处理卡牌命令序列
 
-    # async def async_process_attack_commands(self, attacker_card: dict, target_card: dict = None, player_type: str = "player") -> bool:
-    #     """处理攻击命令序列"""
-    #     try:
-    #         command_sequence = []
+        Args:
+            card_id: 卡牌ID
+            card: 卡牌数据
+            player_type: 玩家类型
+            phase: 执行阶段，如 phase_playcard, phase_battlecry, phase_deathrattle 等
+
+        Returns:
+            bool: 是否成功执行所有命令
+        """
+        try:
+            # 查找卡牌命令配置 (优先查找特定 card_id)
+            card_commands = next(
+                (cmd for cmd in self.commands_config if str(cmd.get("card_id", "")) == str(card_id)),
+                None
+            )
+
+            #如果找不到特定卡牌的命令配置，则查找 card_id 为 "all" 的默认配置
+            if not card_commands:
+                card_commands = next(
+                    (cmd for cmd in self.commands_config if str(cmd.get("card_id", "")) == "all"),
+                    None
+                )
             
-    #         # 1. 选择攻击者
-    #         command_sequence.append({
-    #             "action": "SELECT_ATTACKER",
-    #             "parameters": {
-    #                 "card_id": attacker_card.get("id"),
-    #                 "player_type": player_type
-    #             },
-    #             "duration": 0.5
-    #         })
-            
-    #         # 2. 如果有目标卡牌，选择目标
-    #         if target_card:
-    #             command_sequence.append({
-    #                 "action": "SELECT_TARGET",
-    #                 "parameters": {
-    #                     "card_id": target_card.get("id"),
-    #                     "player_type": "opponent" if player_type == "player" else "player"
-    #                 },
-    #                 "duration": 0.5
-    #             })
-            
-    #         # 3. 执行攻击
-    #         command_sequence.append({
-    #             "action": "PERFORM_ATTACK",
-    #             "parameters": {
-    #                 "attacker_id": attacker_card.get("id"),
-    #                 "target_id": target_card.get("id") if target_card else None,
-    #                 "player_type": player_type
-    #             },
-    #             "duration": 1.0
-    #         })
-            
-    #         # 启动命令序列
-    #         if command_sequence:
-    #             for command in command_sequence:
-    #                 success = self.process_single_command(command)
-    #                 await asyncio.sleep(1.5) 
-    #                 if not success:
-    #                     return False
-            
-    #         return True
-            
-    #     except Exception as e:
-    #         debug_utils.log("game", "处理攻击命令出错", {
-    #             "错误": str(e),
-    #             "攻击者": attacker_card.get("id"),
-    #             "目标": target_card.get("id") if target_card else None
-    #         })
-    #         return False
+            if not card_commands:
+                print(f"❌ 找不到卡牌命令配置: {card_id} 或 默认 all 配置")
+                return False
+
+
+            # 获取指定阶段的命令列表
+            phase_key = f"{phase}_instructions"
+            phase_commands = card_commands.get(phase_key, [])
+
+            if not phase_commands:
+                print(f"⚠️ 卡牌 {card_id} (或默认 all ) 在 {phase} 阶段没有命令")
+                return True  # 没有命令也是正常的
+
+            # 按序号排序命令
+            sorted_commands = sorted(phase_commands, key=lambda x: x.get("sequence", 0))
+
+            # 构建命令序列
+            command_sequence = []
+            for command in sorted_commands:
+                # 获取命令信息
+                action = command.get("action")
+                parameters = command.get("parameters", {}).copy()  # 创建参数的副本
+                duration = command.get("duration", 0)
+
+                # 确保参数中的卡牌ID与当前卡牌一致
+                if "card_id" in parameters:
+                    parameters["card_id"] = str(card_id)
+
+                # 添加玩家类型到参数中
+                parameters["player_type"] = player_type
+
+                # 添加到命令序列
+                command_sequence.append({
+                    "action": action,
+                    "parameters": parameters,
+                    "duration": duration
+                })
+
+                # 输出命令信息
+                print(
+                    f"添加到命令序列: {action} ({phase})\n"
+                    f"参数: {json.dumps(parameters, ensure_ascii=False, indent=2)}"
+                )
+
+            # 启动命令序列
+            if command_sequence:
+                self.game_manager.start_command_sequence(command_sequence)
+                # asyncio.run(self.game_manager.async_process_command_sequence_all(command_sequence))
+
+            return True
+
+        except Exception as e:
+            debug_utils.log("game", "处理卡牌命令出错", {
+            "错误": str(e),
+            "阶段": phase,
+            "卡牌ID": card_id
+        })
+            return False
         
-    # def process_attack_commands(self, attacker_card: dict, target_card: dict = None, player_type: str = "player") -> bool:
-    #     """处理攻击命令序列"""
-    #     try:
-    #         command_sequence = []
+    async def async_process_single_command(self, command: Dict[str, Any]) -> bool:
+        """处理单个命令
+        
+        Args:
+            command: 命令数据，包含 action、parameters 和 duration
             
-    #         # 1. 选择攻击者
-    #         command_sequence.append({
-    #             "action": "SELECT_ATTACKER",
-    #             "parameters": {
-    #                 "card_id": attacker_card.get("id"),
-    #                 "player_type": player_type
-    #             },
-    #             "duration": 0.5
-    #         })
+        Returns:
+            bool: 命令是否执行成功
+        """
+        try:
+            action = command.get('action')
+            parameters = command.get('parameters', {})
+            duration = command.get('duration', 1)
             
-    #         # 2. 如果有目标卡牌，选择目标
-    #         if target_card:
-    #             command_sequence.append({
-    #                 "action": "SELECT_TARGET",
-    #                 "parameters": {
-    #                     "card_id": target_card.get("id"),
-    #                     "player_type": "opponent" if player_type == "player" else "player"
-    #                 },
-    #                 "duration": 0.5
-    #             })
+            # 输出命令信息
+            debug_message = (
+                f"执行命令: {action}\n"
+                f"参数: {json.dumps(parameters, ensure_ascii=False, indent=2)}"
+            )
+            print(debug_message)
+            # self.game_manager.add_game_message(debug_message)
             
-    #         # 3. 执行攻击
-    #         command_sequence.append({
-    #             "action": "PERFORM_ATTACK",
-    #             "parameters": {
-    #                 "attacker_id": attacker_card.get("id"),
-    #                 "target_id": target_card.get("id") if target_card else None,
-    #                 "player_type": player_type
-    #             },
-    #             "duration": 1.0
-    #         })
+            # 执行命令
+            handler = self.command_handlers.get(action)
+            if not handler:
+                error_message = f"❌ 未知命令: {action}"
+                print(error_message)
+                self.game_manager.add_game_message(error_message)
+                return False
+                
+            success = handler(parameters)
+            if not success:
+                error_message = f"❌ 执行命令失败: {action}"
+                print(error_message)
+                # self.game_manager.add_game_message(error_message)
+                return False
+                
+            # 处理持续时间
+            # bug: 如果duration > 0, 会导致命令序列无法执行
+            if duration > 0:
+                await asyncio.sleep(duration)
             
-    #         # 启动命令序列
-    #         if command_sequence:
-    #             self.game_manager.start_command_sequence(command_sequence)
+            # 添加成功消息
+            success_message = f"✅ 命令执行成功: {action}"
+            print(success_message)
+            # self.game_manager.add_game_message(success_message)
+            return True
             
-    #         return True
+        except Exception as e:
+            error_message = f"❌ 命令执行出错: {str(e)}"
+            print(error_message)
+            # self.game_manager.add_game_message(error_message)
+            return False
+
+    def process_single_command(self, command: Dict[str, Any]) -> bool:
+        """处理单个命令
+        
+        Args:
+            command: 命令数据，包含 action、parameters 和 duration
             
-    #     except Exception as e:
-    #         debug_utils.log("game", "处理攻击命令出错", {
-    #             "错误": str(e),
-    #             "攻击者": attacker_card.get("id"),
-    #             "目标": target_card.get("id") if target_card else None
-    #         })
-    #         return False
+        Returns:
+            bool: 命令是否执行成功
+        """
+        try:
+            action = command.get('action')
+            parameters = command.get('parameters', {})
+            duration = command.get('duration', 0)
             
+            # 输出命令信息
+            debug_message = (
+                f"执行命令: {action}\n"
+                f"参数: {json.dumps(parameters, ensure_ascii=False, indent=2)}"
+            )
+            print(debug_message)
+            # self.game_manager.add_game_message(debug_message)
+            
+            # 执行命令
+            handler = self.command_handlers.get(action)
+            if not handler:
+                error_message = f"❌ 未知命令: {action}"
+                print(error_message)
+                self.game_manager.add_game_message(error_message)
+                return False
+                
+            success = handler(parameters)
+            if not success:
+                error_message = f"❌ 执行命令失败: {action}"
+                print(error_message)
+                # self.game_manager.add_game_message(error_message)
+                return False
+                
+            # 处理持续时间
+            if duration > 0:
+                time.sleep(duration)
+            
+            # 添加成功消息
+            success_message = f"✅ 命令执行成功: {action}"
+            print(success_message)
+            # self.game_manager.add_game_message(success_message)
+            
+            return True
+            
+        except Exception as e:
+            error_message = f"❌ 命令执行出错: {str(e)}"
+            print(error_message)
+            # self.game_manager.add_game_message(error_message)
+            return False

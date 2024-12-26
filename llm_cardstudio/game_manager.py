@@ -573,6 +573,7 @@ class GameManager:
         # 启动命令序列
         if command_sequence:
             self.start_command_sequence(command_sequence)
+            # self.async_start_command_sequence(command_sequence)
             # 记录已攻击标记
             if player_type == "player":
                 self.game_state["has_attacked_this_turn"] = True
@@ -597,19 +598,6 @@ class GameManager:
         """
         # 目前使用随机决策，50%概率打出卡牌 
         return random.random() < 0.5
-
-    # def _process_turn_start(self):
-    #     """处理回合开始阶段"""
-    #     active_player = self.game_state["turn_info"]["active_player"]
-        
-    #     # 重置攻击标记
-    #     self.game_state["has_attacked_this_turn"] = False
-        
-    #     # 补充能量
-    #     max_energy = self.game_state["turn_info"]["current_turn"]
-    #     if max_energy > 10:
-    #         max_energy = 10
-    #     self.game_state[f"{active_player}_stats"]["energy"] = max_energy
 
     def _process_gameloop_state(self):
         """处理游戏主循环状态"""
@@ -678,7 +666,8 @@ class GameManager:
             self.game_state["gameloop_state"] = "welcome"
             st.rerun()
             return True
-            
+
+        # return state changed?    
         return False
 
     def _process_player_turn(self):
@@ -809,7 +798,9 @@ class GameManager:
         self.command_sequence['current_index'] = 0
         self.command_sequence['is_executing'] = True
         print(f"开始执行命令序列，共 {len(commands)} 个命令")
-        
+        # asyncio.create_task(self.async_process_command_sequence_all(commands))
+        # print("启动asyncio命令序列-----")
+
     def process_next_command(self) -> bool:
         """处理序列中的下一个命令"""
         if not self.command_sequence['is_executing']:
@@ -849,95 +840,63 @@ class GameManager:
         total = len(self.command_sequence['commands'])
         current = self.command_sequence['current_index']
         return current, total
-    
-    # async def async_perform_attack(self, attacker_card_id: str, target_card_id: str = None, player_type: str = "player") -> bool:
-    #     """执行攻击动作
-        
-    #     Args:
-    #         attacker_card_id: 攻击者卡牌ID
-    #         target_card_id: 目标卡牌ID，如果为None或为"opponent_hero"则直接攻击对手
-    #         player_type: 攻击方，可选值："player" 或 "opponent"
-            
-    #     Returns:
-    #         bool: 攻击是否成功执行
-    #     """
-    #     # 检查是否是第一回合
-    #     if self.game_state["turn_info"]["current_turn"] == 1:
-    #         self.add_game_message("❌ 第一回合不能进行攻击")
-    #         return False
-            
-    #     # 检查是否已经攻击过
-    #     if player_type == "player" and self.game_state.get("has_attacked_this_turn", False):
-    #         self.add_game_message("❌ 本回合已经攻击过了")
-    #         return False
-            
-    #     # 获取攻击者卡牌
-    #     attacker_field = self.game_state["field_cards"][player_type]
-    #     attacker_card = next((card for card in attacker_field if card["id"] == attacker_card_id), None)
-    #     if not attacker_card:
-    #         self.add_game_message("❌ 找不到指定的攻击者卡牌")
-    #         return False
-            
-    #     # 获取目标卡牌（如果有）
-    #     target_card = None
-    #     if target_card_id and target_card_id != "opponent_hero":
-    #         opponent_type = "opponent" if player_type == "player" else "player"
-    #         opponent_field = self.game_state["field_cards"][opponent_type]
-    #         target_card = next((card for card in opponent_field if card["id"] == target_card_id), None)
-    #         if not target_card:
-    #             self.add_game_message("❌ 找不到指定的目标卡牌")
-    #             return False
 
-    #     # 构建攻击命令序列
-    #     command_sequence = []
+    async def async_process_command_sequence_all(self, commands: List[Dict]):
+        """异步处理命令序列"""
+        if not self.is_executing_commands():
+            return
         
-    #     # 1. 选择攻击者
-    #     command_sequence.append({
-    #         "action": "SELECT_ATTACKER",
-    #         "parameters": {
-    #             "card_id": attacker_card["id"],
-    #             "player_type": player_type
-    #         },
-    #         "duration": 0.5
-    #     })
+        print("开始执行命令序列 async_process_command_sequence_all")
+
+        """开始执行命令序列"""
+        self.command_sequence['commands'] = commands
+        self.command_sequence['current_index'] = 0
+        self.command_sequence['is_executing'] = True
+        print(f"开始执行命令序列，共 {len(commands)} 个命令")
+
+        commands = self.command_sequence['commands']
+  
+        """异步处理命令序列"""
+        while self.command_sequence['is_executing']:
+                has_next_command =  self.process_next_command()
+                await asyncio.sleep(0)
+                # has_next_command =  self.async_process_next_command()
+                # command = commands[self.command_sequence['current_index']]
+                # duration = command.get('duration', 1)
+                # # if duration > 0:
+                # #     await asyncio.sleep(duration)
+                # #     # time.sleep(duration)
+                if not has_next_command:
+                    break
         
-    #     # 2. 如果有目标卡牌，选择目标
-    #     if target_card:
-    #         command_sequence.append({
-    #             "action": "SELECT_TARGET",
-    #             "parameters": {
-    #                 "card_id": target_card["id"],
-    #                 "target_type": "opponent" if player_type == "player" else "player"
-    #             },
-    #             "duration": 0.5
-    #         })
-    #     else:
-    #         # 直接攻击英雄
-    #         command_sequence.append({
-    #             "action": "SELECT_TARGET",
-    #             "parameters": {
-    #                 "target_type": "opponent_hero"
-    #             },
-    #             "duration": 0.5
-    #         })
+        print("async_process_command_sequence_all: 命令序列已完成")
+        # 命令序列为空,或者 执行完成
+        self.command_sequence['commands'] = []
+        self.command_sequence['current_index'] = 0
+        self.command_sequence['is_executing'] = False
+
+
+    async def async_process_next_command(self) -> bool:
+        """处理序列中的下一个命令"""
+        if not self.command_sequence['is_executing']:
+            return False
+
+        commands = self.command_sequence['commands']
+        current_index = self.command_sequence['current_index']
+
+        if current_index >= len(commands):
+            self.add_game_message("命令序列执行完成")
+            print("命令序列执行完成")
+            self.command_sequence['is_executing'] = False
+            return False # 返回False表示执行完成
+
+        command = commands[current_index]
+        self.command_sequence['current_index'] += 1
         
-    #     # 3. 执行攻击
-    #     command_sequence.append({
-    #         "action": "PERFORM_ATTACK",
-    #         "parameters": {
-    #             "attacker_id": attacker_card["id"],
-    #             "target_id": target_card["id"] if target_card else None,
-    #             "player_type": player_type
-    #         },
-    #         "duration": 1.0
-    #     })
+        #  处理单个命令，并且等待其完成
+        await self.commands_processor.async_process_single_command(command)
+
+        print(f"执行命令: {current_index + 1}/{len(commands)} {command['action']}")
+        self.add_game_message(f"执行命令: {current_index + 1}/{len(commands)} {command['action']}")
         
-    #     if command_sequence:
-    #         for command in command_sequence:
-    #             success = await self.commands_processor.process_single_command(command)
-    #             #  asyncio.sleep(1.5) 
-    #             self.add_game_message(f"执行命令: {command['action']}")
-    #             if not success:
-    #                 return False
-                
-    #     return True
+        return True  # 返回True 表示还有命令需要执行

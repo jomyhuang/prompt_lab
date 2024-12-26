@@ -37,6 +37,7 @@ def update_ui_state(show_success_message=None):
         show_success_message (str, optional): 如果提供，显示成功消息
     """
     st.rerun()
+    # st.experimental_rerun()
 
 def render_sidebar_controls(game_state, gameloop_state):
     """渲染侧边栏控制界面"""
@@ -268,51 +269,25 @@ def render_game_view():
         st.caption("手牌")
         st.markdown(f"✋ {len(player_hand)}")
 
-def _process_game_loop():
-    """处理游戏循环"""
-    game_manager = st.session_state.game_manager
-    require_update = False
-    
-    # 检查是否有命令正在执行
-    if game_manager.is_executing_commands():
-        current, total = st.session_state.game_manager.get_current_command_progress()
-        progress_text = f"执行命令 {current}/{total}"
-        st.progress(current / total, text=progress_text)
-        # 执行下一个命令
-        success = game_manager.process_next_command()
-        require_update = True
-    
-    # 检查是否有LLM响应
-    if st.session_state.ai_input:
-        _process_user_input_ai(st.session_state.ai_input)
-        st.session_state.ai_input = ""
-        require_update = True
-    
-    return require_update
-
-def _process_user_input_ai(message):
+async def _process_user_input_ai(user_input):
     """AI处理用户输入"""
     # 获取当前游戏状态
     game_state = st.session_state.game_manager.get_game_state()
     
     # 记录调试信息
-    debug_utils.log("llm", "处理用户输入", {
-        "用户输入": message
-    })
+    # debug_utils.log("llm", "处理用户输入", { 注意这里我注释了，防止引用错误
+    #     "用户输入": message
+    # })
     
     # 显示运行状态
     status_container = st.container()
     with status_container:
         with st.status("AI响应...", state="running", expanded=False) as status:
-            # 生成AI响应
-            ai_response = st.session_state.llm_interaction.generate_ai_response(message, game_state)
-            status.update(label="完成", state="complete")
-    
-    # 添加AI响应到消息历史
-    st.session_state.messages.append({"role": "assistant", "content": ai_response.content})
-    
-    # 记录调试信息
-    debug_utils.log("game", "AI响应", {"响应内容": ai_response.content})
+            action_result = st.session_state.llm_interaction.parse_user_action(user_input)
+            ai_message = await st.session_state.llm_interaction.generate_ai_response(user_input, game_state)
+
+            status.update(label="AI响应完成", state="complete", expanded=False)
+            st.session_state.messages.append({"role": "assistant", "content": ai_message.content})
 
 def process_user_input(user_input):
     """处理用户输入"""
@@ -364,6 +339,7 @@ def process_user_input(user_input):
         # 如果是结束回合的操作，直接结束回合
         elif "结束" in user_input and "回合" in user_input:
             st.session_state.game_manager.game_state["player_turn_state"] = "end_turn"
+            st.session_state.game_manager._process_gameloop_state()
             return
 
         # 不理解用户输入
@@ -394,7 +370,7 @@ def render_action_controls():
     user_input = st.chat_input("输入你的行动或问题...", key="chat_input")
     if user_input:
         add_user_input_ai(user_input)
-        update_ui_state()
+        # update_ui_state()
         return
 
     # 创建按钮列
@@ -407,7 +383,7 @@ def render_action_controls():
             if card:
                 message = f"我使用{card['name']}卡牌"
                 process_user_input(message)
-                update_ui_state()
+                # update_ui_state()
                 return
     
     # 攻击按钮
@@ -424,7 +400,7 @@ def render_action_controls():
         
         if st.button(attack_button_text, key="attack", use_container_width=True, disabled=attack_disabled):
             start_card_selection("attack", "field", "opponent_field")
-            update_ui_state()
+            # update_ui_state()
             return
     
     # 建议按钮        
@@ -434,7 +410,7 @@ def render_action_controls():
             if card:
                 message = f"分析当前局势，并给出使用{card['name']}的建议"
                 add_user_input_ai(message)
-                update_ui_state()
+                # update_ui_state()
                 return
     
     # 结束回合按钮
@@ -442,7 +418,7 @@ def render_action_controls():
         if st.button("结束回合", key="end_turn", use_container_width=True):
             message = "我要结束当前回合"
             process_user_input(message)
-            update_ui_state()
+            # update_ui_state()
             return
 
     # 显示选中卡牌信息
@@ -475,15 +451,15 @@ def render_chat_view():
         user_input = st.chat_input("输入你的行动或问题...", key="chat_input")
         if user_input:
             add_user_input_ai(user_input)
-            update_ui_state()
+            # update_ui_state()
             return
 
-    # 处理游戏循环并检查是否需要更新UI
-    if _process_game_loop():
-        update_ui_state()
-        return
+def render_action_view():
+    """渲染玩家操作界面"""
+    game_state = st.session_state.game_manager.get_game_state()
+    gameloop_state = game_state.get("gameloop_state", "welcome")
 
-    elif gameloop_state == "player_turn":
+    if gameloop_state == "player_turn":
         # 玩家回合界面
         st.markdown("### 🎮 你的回合")
         
@@ -560,6 +536,9 @@ def start_card_selection(action_type, source_type, target_type, callback=None):
         "callback": callback
     }
 
+    # 更新UI
+    update_ui_state()
+
 def end_card_selection():
     """结束卡牌选择流程"""
     if st.session_state.card_selection["callback"]:
@@ -576,6 +555,9 @@ def end_card_selection():
         "target_card": None,
         "callback": None
     }
+
+    # 更新UI
+    update_ui_state()
 
 def render_card_selection():
     """渲染卡牌选择界面"""
@@ -645,10 +627,62 @@ def render_card_selection():
                 # 处理攻击命令
                 process_user_input(message)
             end_card_selection()
-            update_ui_state()
+            # update_ui_state()
             return
 
-def main():
+# def _process_game_loop():
+#     """处理游戏循环"""
+#     game_manager = st.session_state.game_manager
+#     require_update = False
+    
+#     # 检查是否有命令正在执行
+#     if game_manager.is_executing_commands():
+#         current, total = st.session_state.game_manager.get_current_command_progress()
+#         progress_text = f"执行命令 {current}/{total}"
+#         st.progress(current / total, text=progress_text)
+#         # 执行下一个命令
+#         success = game_manager.process_next_command()
+#         require_update = True
+    
+#     # 检查是否有LLM响应
+#     if st.session_state.ai_input:
+#         _process_user_input_ai(st.session_state.ai_input)
+#         st.session_state.ai_input = ""
+#         require_update = True
+    
+#     return require_update
+
+async def _process_game_loop():
+    """处理游戏循环"""
+    game_manager = st.session_state.game_manager
+    require_update = False
+    
+    # if game_manager.is_executing_commands():
+    #     print("enter 命令序列 loop")
+    #     require_update = True
+    #     while game_manager.is_executing_commands():
+    #         update_ui_state()
+    #         await asyncio.sleep(0)
+    #     print("exit 命令序列 loop")
+ 
+    # 检查是否有命令正在执行
+    if game_manager.is_executing_commands():
+        current, total = game_manager.get_current_command_progress()
+        progress_text = f"执行命令 {current}/{total}"
+        st.progress(current / total, text=progress_text)
+        # 执行下一个命令
+        has_next_command = await game_manager.async_process_next_command()
+        require_update = True
+ 
+    # 检查是否有LLM响应
+    if st.session_state.ai_input:
+        await _process_user_input_ai(st.session_state.ai_input)     # 注意这里要await,让出执行权
+        st.session_state.ai_input = ""
+        require_update = True
+    
+    return require_update
+
+async def main():
     """主函数"""
     # 设置页面配置
     st.set_page_config(
@@ -663,11 +697,54 @@ def main():
     
     # 渲染游戏区
     with game_col:
-        render_game_view()
-    
+        render_game_view()    
+
     # 渲染聊天区
     with chat_col:
         render_chat_view()
+        render_action_view()
+        
+        if await _process_game_loop():
+            update_ui_state()
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+
+    if "game_manager" not in st.session_state:
+       # 初始化游戏状态
+       st.session_state.game_manager =  GameManager()
+        # 初始化消息列表
+       st.session_state.messages = []
+    # 初始化卡牌选择状态
+    if "card_selection" not in st.session_state:
+        st.session_state.card_selection = {
+            "is_selecting": False,  # 是否处于选择状态
+            "action_type": None,    # 动作类型 (attack/play/etc)
+            "target_type": None,    # 目标类型 (opponent_field/opponent_hero)
+            "selected_card": None,  # 已选择的卡牌
+            "target_card": None,    # 已选择的目标
+        }
+    asyncio.run(main())
+
+# def main():
+#     """主函数"""
+#     # 设置页面配置
+#     st.set_page_config(
+#         page_title="🎮 LLM Card Studio",
+#         page_icon="🎮",
+#         layout="wide",
+#         initial_sidebar_state="collapsed"
+#     )
+    
+#     # 分割界面为游戏区和聊天区
+#     game_col, chat_col = st.columns([1, 1])
+    
+#     # 渲染游戏区
+#     with game_col:
+#         render_game_view()
+    
+#     # 渲染聊天区
+#     with chat_col:
+#         render_chat_view()
+
+# if __name__ == "__main__":
+#     main()
