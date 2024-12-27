@@ -26,7 +26,11 @@ class CommandProcessor:
             'SELECT_TARGET': self._handle_select_target,
             'PERFORM_ATTACK': self._handle_perform_attack,
             'APPLY_DAMAGE': self._handle_apply_damage,
-            'CHECK_AND_DESTROY': self._handle_check_and_destroy
+            'CHECK_AND_DESTROY': self._handle_check_and_destroy,
+            'SELECT_ATTACKER_HMI': self._handle_select_attacker_hmi,  # 添加HMI选择攻击者处理器
+            'SELECT_TARGET_HMI': self._handle_select_target_hmi,      # 添加HMI选择目标处理器
+            'PAUSE_COMMAND_SEQUENCE': self._handle_pause_command_sequence,  # 添加暂停命令序列处理器
+            'RESUME_COMMAND_SEQUENCE': self._handle_resume_command_sequence,  # 添加恢复命令序列处理器
         }
         
         self.effect_handlers = {
@@ -659,7 +663,7 @@ class CommandProcessor:
             self.game_manager.add_game_message(f"💀 {card['name']} 被摧毁了")
             
         return True
-    
+        
     def get_playcard_commands(self, card_id: str, card: dict, player_type: str, phase: str = "phase_playcard") -> Dict[str, Any]:
         """处理卡牌命令序列
 
@@ -846,4 +850,108 @@ class CommandProcessor:
             error_message = f"❌ 命令执行出错: {str(e)}"
             print(error_message)
             # self.game_manager.add_game_message(error_message)
+            return False
+
+    def _handle_select_attacker_hmi(self, params: Dict[str, Any]) -> bool:
+        """处理HMI选择攻击者指令"""
+        print("进入 _handle_select_attacker_hmi 函数")
+        
+        player_type = params.get('player_type', 'player')
+        
+        try:
+            # 获取场上的卡牌
+            field_cards = self.game_manager.game_state['field_cards'][player_type]
+            
+            # 检查是否有可用的攻击者
+            if not field_cards:
+                self.game_manager.add_game_message("❌ 场上没有可用的攻击者")
+                return False
+                
+            # 设置游戏状态为等待选择攻击者
+            self.game_manager.game_state['awaiting_selection'] = {
+                'type': 'attacker',
+                'player_type': player_type,
+                'valid_cards': field_cards
+            }
+            
+            # 暂停命令序列执行
+            self.game_manager.pause_command_sequence()
+            
+            self.game_manager.add_game_message("🎯 请选择一个攻击者")
+            return True
+            
+        except Exception as e:
+            print(f"选择攻击者失败: {str(e)}")
+            return False
+
+    def _handle_select_target_hmi(self, params: Dict[str, Any]) -> bool:
+        """处理HMI选择目标指令"""
+        print("进入 _handle_select_target_hmi 函数")
+        
+        target_type = params.get('target_type', 'opponent')
+        player_type = params.get('player_type', 'player')
+        
+        try:
+            # 获取可选择的目标
+            valid_targets = []
+            
+            # 获取对手场上的卡牌
+            opponent_type = "opponent" if player_type == "player" else "player"
+            opponent_field = self.game_manager.game_state['field_cards'][opponent_type]
+            
+            # 添加对手场上的卡牌作为可选目标
+            valid_targets.extend(opponent_field)
+            
+            # 添加对手英雄作为可选目标
+            valid_targets.append({
+                'id': 'opponent_hero',
+                'name': '对手英雄',
+                'type': 'hero'
+            })
+            
+            # 设置游戏状态为等待选择目标
+            self.game_manager.game_state['awaiting_selection'] = {
+                'type': 'target',
+                'player_type': player_type,
+                'valid_targets': valid_targets
+            }
+            
+            # 暂停命令序列执行
+            self.game_manager.pause_command_sequence()
+            
+            self.game_manager.add_game_message("🎯 请选择一个攻击目标")
+            return True
+            
+        except Exception as e:
+            print(f"选择攻击目标失败: {str(e)}")
+            return False
+
+    def _handle_pause_command_sequence(self, params: Dict[str, Any]) -> bool:
+        """处理暂停命令序列指令"""
+        print("进入 _handle_pause_command_sequence 函数")
+        
+        try:
+            # 暂停命令序列执行
+            self.game_manager.pause_command_sequence()
+            
+            self.game_manager.add_game_message("⏸️ 命令序列已暂停")
+            return True
+            
+        except Exception as e:
+            print(f"暂停命令序列失败: {str(e)}")
+            return False
+
+    def _handle_resume_command_sequence(self, params: Dict[str, Any]) -> bool:
+        """处理恢复命令序列指令"""
+        print("进入 _handle_resume_command_sequence 函数")
+        
+        try:
+            # 恢复命令序列执行
+            self.game_manager.resume_command_sequence()
+            
+            self.game_manager.add_game_message("▶️ 命令序列已恢复")
+            return True
+            
+        except Exception as e:
+            print(f"恢复命令序列失败: {str(e)}")
             return False
