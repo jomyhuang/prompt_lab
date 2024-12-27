@@ -660,7 +660,7 @@ class CommandProcessor:
             
         return True
     
-    def process_card_commands(self, card_id: str, card: dict, player_type: str, phase: str = "phase_playcard") -> bool:
+    def get_playcard_commands(self, card_id: str, card: dict, player_type: str, phase: str = "phase_playcard") -> Dict[str, Any]:
         """处理卡牌命令序列
 
         Args:
@@ -670,7 +670,7 @@ class CommandProcessor:
             phase: 执行阶段，如 phase_playcard, phase_battlecry, phase_deathrattle 等
 
         Returns:
-            bool: 是否成功执行所有命令
+            Dict[str, Any]: 命令序列
         """
         try:
             # 查找卡牌命令配置 (优先查找特定 card_id)
@@ -730,12 +730,7 @@ class CommandProcessor:
                     f"参数: {json.dumps(parameters, ensure_ascii=False, indent=2)}"
                 )
 
-            # 启动命令序列
-            if command_sequence:
-                self.game_manager.start_command_sequence(command_sequence)
-                # asyncio.run(self.game_manager.async_process_command_sequence_all(command_sequence))
-
-            return True
+            return command_sequence
 
         except Exception as e:
             debug_utils.log("game", "处理卡牌命令出错", {

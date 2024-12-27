@@ -164,10 +164,11 @@ class GameManager:
             # })
             
             # 处理卡牌命令
-            # TODO: 如果没有效果指令集,则无法驱动handle_move_card
-            if self.commands_processor:
-                success = self.commands_processor.process_card_commands(card_id, card, player_type, "phase_playcard")
-                # 出牌阶段
+            command_sequence = self.commands_processor.get_playcard_commands(card_id, card, player_type, "phase_playcard")
+
+            # 启动命令序列
+            if command_sequence:
+                success = self.start_command_sequence(command_sequence)
                 if not success:
                     print(f"处理卡牌命令失败: {card_id}")
             
@@ -339,8 +340,6 @@ class GameManager:
     def start_game(self):
         """开始新游戏"""
         self.game_state["gameloop_state"] = "start_game"
-        # self._process_gameloop_state()
-        # 更新UI
 
     def _ai_thinking(self, message, duration=0.5):
         """模拟AI思考过程
@@ -349,7 +348,7 @@ class GameManager:
             duration: 思考时间（秒）
         """
         self.add_game_message(f"🤖AI 正在思考: {message}")
-        # self._player_phase_transition(duration)
+        self._player_phase_transition(duration)
 
     def save_game(self, save_name):
         """保存游戏状态到文件
@@ -573,14 +572,110 @@ class GameManager:
         
         # 启动命令序列
         if command_sequence:
-            self.start_command_sequence(command_sequence)
-            # self.async_start_command_sequence(command_sequence)
+            success = self.start_command_sequence(command_sequence)
             # 记录已攻击标记
             if player_type == "player":
                 self.game_state["has_attacked_this_turn"] = True
-            return True
+            return success
                 
-        return False
+        return True
+
+    def new_perform_attack(self, player_type: str = "player") -> bool:
+        """执行攻击动作
+        
+        Args:
+            attacker_card_id: 攻击者卡牌ID
+            target_card_id: 目标卡牌ID，如果为None或为"opponent_hero"则直接攻击对手
+            player_type: 攻击方，可选值："player" 或 "opponent"
+            
+        Returns:
+            bool: 攻击是否成功执行
+        """
+        # 检查是否是第一回合
+        if self.game_state["turn_info"]["current_turn"] == 1:
+            self.add_game_message("❌ 第一回合不能进行攻击")
+            return False
+            
+        # 检查是否已经攻击过
+        if player_type == "player" and self.game_state.get("has_attacked_this_turn", False):
+            self.add_game_message("❌ 本回合已经攻击过了")
+            return False
+
+        # 检查己方场上是否有卡牌
+        player_field = self.game_state["field_cards"][player_type]
+        if not player_field:
+            self.add_game_message("❌ 己方场上没有卡牌，不能攻击")
+            return False
+        # # 获取攻击者卡牌
+        # attacker_field = self.game_state["field_cards"][player_type]
+        # attacker_card = next((card for card in attacker_field if card["id"] == attacker_card_id), None)
+        # if not attacker_card:
+        #     self.add_game_message("❌ 找不到指定的攻击者卡牌")
+        #     return False
+            
+        # # 获取目标卡牌（如果有）
+        # target_card = None
+        # if target_card_id and target_card_id != "opponent_hero":
+        #     opponent_type = "opponent" if player_type == "player" else "player"
+        #     opponent_field = self.game_state["field_cards"][opponent_type]
+        #     target_card = next((card for card in opponent_field if card["id"] == target_card_id), None)
+        #     if not target_card:
+        #         self.add_game_message("❌ 找不到指定的目标卡牌")
+        #         return False
+
+        # 构建攻击命令序列
+        command_sequence = []
+        
+        # 1. HMI选择攻击者
+        command_sequence.append({
+            "action": "SELECT_ATTACKER_HMI",
+            "parameters": {
+                "card_id": "SELECT_ATTACKER_HMI",
+                "player_type": player_type
+            },
+            "duration": 0.5
+        })
+        
+        # 2. 如果有目标卡牌，选择目标
+        if target_card:
+            command_sequence.append({
+                "action": "SELECT_TARGET",
+                "parameters": {
+                    "card_id": target_card["id"],
+                    "target_type": "opponent" if player_type == "player" else "player"
+                },
+                "duration": 0.5
+            })
+        else:
+            # 直接攻击英雄
+            command_sequence.append({
+                "action": "SELECT_TARGET",
+                "parameters": {
+                    "target_type": "opponent_hero"
+                },
+                "duration": 0.5
+            })
+        
+        # 3. 执行攻击
+        command_sequence.append({
+            "action": "PERFORM_ATTACK",
+            "parameters": {
+                "attacker_id": attacker_card["id"],
+                "target_id": target_card["id"] if target_card else None,
+                "player_type": player_type
+            },
+            "duration": 1.0
+        })
+        
+        # 启动命令序列
+        if command_sequence:
+            success = self.start_command_sequence(command_sequence)
+            # 记录已攻击标记
+            if player_type == "player":
+                self.game_state["has_attacked_this_turn"] = True
+            return success
+                
+        return True
 
     def ai_decide_attack(self):
         """AI决定是否攻击

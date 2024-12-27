@@ -37,9 +37,9 @@ if "processing_state" not in st.session_state:
 
 def update_ui_state():
     """更新界面状态"""
-    # # 添加更新时间戳
-    # st.session_state["last_update_time"] = time.time()
-    
+    # 添加更新时间戳
+    st.session_state["last_update_time"] = time.time()
+    print(f"update_ui_state: {st.session_state['last_update_time']}")
     # # 只有在真正需要时才重新运行
     # if st.session_state.get("require_rerun", False):
     #     st.session_state.require_rerun = False
@@ -82,7 +82,7 @@ def render_sidebar_controls(game_state, gameloop_state):
                         st.error(message)
         
         if st.button("手动更新界面"):
-            update_ui_state("手动更新界面")
+            st.rerun()
             
         # 使用expander显示游戏状态
         with st.expander("🔍 查看游戏状态", expanded=True):
@@ -318,37 +318,38 @@ def process_user_input(user_input):
                 })
                 
                 # 使用卡牌（会自动处理命令）
-                result = st.session_state.game_manager.play_card(str(selected_card_id))
+                result = st.session_state.game_manager.play_card(selected_card_id)
             # return
     
         # 如果是攻击的操作
         elif "攻击" in user_input:
-            if st.session_state.card_selection["is_selecting"]:
-                selected_card = st.session_state.card_selection["selected_card"]
-                target_card = st.session_state.card_selection["target_card"]
-                if selected_card:
-                    target_id = target_card["id"] if isinstance(target_card, dict) else target_card
-                    # success_attack = asyncio.run( st.session_state.game_manager.async_perform_attack(
-                    #     attacker_card_id=selected_card["id"],
-                    #     target_card_id=target_id,
-                    #     player_type="player"
-                    # ) )
-                    success_attack = st.session_state.game_manager.perform_attack(
-                        attacker_card_id=selected_card["id"],
-                        target_card_id=target_id,
+            result = st.session_state.game_manager.new_perform_attack(
                         player_type="player"
                     )
-                end_card_selection()
-            else:
-                start_card_selection("attack", "field", "opponent_field")
-            # return
+            
+            # if st.session_state.card_selection["is_selecting"]:
+            #     selected_card = st.session_state.card_selection["selected_card"]
+            #     target_card = st.session_state.card_selection["target_card"]
+            #     if selected_card:
+            #         target_id = target_card["id"] if isinstance(target_card, dict) else target_card
+            #         # success_attack = asyncio.run( st.session_state.game_manager.async_perform_attack(
+            #         #     attacker_card_id=selected_card["id"],
+            #         #     target_card_id=target_id,
+            #         #     player_type="player"
+            #         # ) )
+            #         success_attack = st.session_state.game_manager.perform_attack(
+            #             attacker_card_id=selected_card["id"],
+            #             target_card_id=target_id,
+            #             player_type="player"
+            #         )
+            #     end_card_selection()
+            # else:
+            #     start_card_selection("attack", "field", "opponent_field")
+            # # return
     
         # 如果是结束回合的操作，直接结束回合
         elif "结束" in user_input and "回合" in user_input:
             st.session_state.game_manager.game_state["player_turn_state"] = "end_turn"
-            # 强制处理回合结束
-            st.session_state.game_manager._process_gameloop_state()
-            # return
 
         # 不理解用户输入
         else:
@@ -356,9 +357,7 @@ def process_user_input(user_input):
             debug_utils.log("game", "无法处理用户输入", {
                 "用户输入": user_input
             })
-        
-        # 更新UI
-        # update_ui_state()
+
 
 def render_action_controls():
     """渲染玩家行动控制界面"""
@@ -380,7 +379,6 @@ def render_action_controls():
     user_input = st.chat_input("输入你的行动或问题...", key="chat_input")
     if user_input:
         add_user_input_ai(user_input)
-        # update_ui_state()
         return
 
     # 创建按钮列
@@ -393,7 +391,6 @@ def render_action_controls():
             if card:
                 message = f"我使用{card['name']}卡牌"
                 process_user_input(message)
-                # update_ui_state()
                 return
     
     # 攻击按钮
@@ -410,7 +407,6 @@ def render_action_controls():
         
         if st.button(attack_button_text, key="attack", use_container_width=True, disabled=attack_disabled):
             start_card_selection("attack", "field", "opponent_field")
-            # update_ui_state()
             return
     
     # 建议按钮        
@@ -420,7 +416,6 @@ def render_action_controls():
             if card:
                 message = f"分析当前局势，并给出使用{card['name']}的建议"
                 add_user_input_ai(message)
-                # update_ui_state()
                 return
     
     # 结束回合按钮
@@ -428,7 +423,6 @@ def render_action_controls():
         if st.button("结束回合", key="end_turn", use_container_width=True):
             message = "我要结束当前回合"
             process_user_input(message)
-            # update_ui_state()
             return
 
     # 显示选中卡牌信息
@@ -461,7 +455,6 @@ def render_chat_view():
         user_input = st.chat_input("输入你的行动或问题...", key="chat_input")
         if user_input:
             add_user_input_ai(user_input)
-            # update_ui_state()
             return
 
 def render_action_view():
@@ -488,27 +481,6 @@ def render_action_view():
     elif gameloop_state == "opponent_turn":
         # 对手回合界面
         st.markdown("### 🤖 对手回合")
-
-    # # 处理自动过渡一个状态        
-    # last_state = st.session_state.get("last_gameloop_state", None)
-    # if (gameloop_state != "welcome" and 
-    #     gameloop_state != "player_turn" and 
-    #     gameloop_state != "opponent_turn"):
-        
-    #     if gameloop_state == last_state:
-    #         debug_utils.log("state", "！！！状态重复", {
-    #             "当前状态": gameloop_state,
-    #             "上次状态": last_state,
-    #             "玩家回合状态": st.session_state.game_manager.game_state.get("player_turn_state"),
-    #             "对手回合状态": st.session_state.game_manager.game_state.get("opponent_turn_state")
-    #         })
-    #     else:
-    #         # 处理状态
-    #         st.session_state["last_gameloop_state"] = gameloop_state
-    #         st.session_state.game_manager._process_gameloop_state()
-    
-    # # 记录当前状态
-    # st.session_state["last_gameloop_state"] = gameloop_state
 
 def add_user_message(message):
     """添加用户消息"""
@@ -543,7 +515,7 @@ def start_card_selection(action_type, source_type, target_type, callback=None):
     }
 
     # 更新UI
-    update_ui_state()
+    # update_ui_state()
 
 def end_card_selection():
     """结束卡牌选择流程"""
@@ -633,36 +605,16 @@ def render_card_selection():
                 # 处理攻击命令
                 process_user_input(message)
             end_card_selection()
-            # update_ui_state()
             return
-
-# def _process_game_loop():
-#     """处理游戏循环"""
-#     game_manager = st.session_state.game_manager
-#     require_update = False
-    
-#     # 检查是否有命令正在执行
-#     if game_manager.is_executing_commands():
-#         current, total = st.session_state.game_manager.get_current_command_progress()
-#         progress_text = f"执行命令 {current}/{total}"
-#         st.progress(current / total, text=progress_text)
-#         # 执行下一个命令
-#         success = game_manager.process_next_command()
-#         require_update = True
-    
-#     # 检查是否有LLM响应
-#     if st.session_state.ai_input:
-#         _process_user_input_ai(st.session_state.ai_input)
-#         st.session_state.ai_input = ""
-#         require_update = True
-    
-#     return require_update
 
 async def _process_game_loop():
     """处理游戏循环"""
     game_manager = st.session_state.game_manager
     require_update = False
     
+    # debug 输出状态
+    debug_state_loop()
+
     # 检查是否正在处理状态
     if st.session_state.processing_state:
         return False
@@ -670,77 +622,74 @@ async def _process_game_loop():
     try:
         st.session_state.processing_state = True
         # 状态处理逻辑...
+
+        # 检查是否有命令正在执行
+        if game_manager.is_executing_commands():
+            current, total = game_manager.get_current_command_progress()
+            progress_text = f"执行命令 {current}/{total}"
+            st.progress(current / total, text=progress_text)
+            # 执行下一个命令
+            has_next_command = await game_manager.async_process_next_command()
+            require_update = True
+    
+        # 检查是否有LLM响应
+        if st.session_state.ai_input:
+            await _process_user_input_ai(st.session_state.ai_input)     # 注意这里要await,让出执行权
+            st.session_state.ai_input = ""
+            require_update = True
+
+        # 检查状态是否需要自动过渡
+        game_state = st.session_state.game_manager.get_game_state()
+        current_gameloop_state = game_state.get("gameloop_state", "welcome")
+        current_player_turn_state = game_state.get("player_turn_state", "init")
+        current_opponent_turn_state = game_state.get("opponent_turn_state", "init")
+        last_gameloop_state = st.session_state.get("last_gameloop_state", "welcome")
+        last_player_turn_state = st.session_state.get("last_player_turn_state", "end_turn")
+        last_opponent_turn_state = st.session_state.get("last_opponent_turn_state", "end_turn")
+
+        # 检查状态是否发生变化
+        if last_gameloop_state and current_gameloop_state != last_gameloop_state:
+            # 状态变更后执行 process gameloop state
+            debug_utils.log("process_game_loop", "游戏主循环状态变更", {
+                "当前状态": current_gameloop_state,
+                "上次状态": last_gameloop_state
+            })
+            st.session_state["last_gameloop_state"] = current_gameloop_state
+            st.session_state.game_manager._process_gameloop_state()
+            require_update = True
+
+        if current_gameloop_state == "player_turn":
+            # 检查玩家回合状态是否变更
+            if current_player_turn_state != last_player_turn_state:
+                debug_utils.log("process_game_loop", "玩家回合状态变更", {
+                    "当前状态": current_player_turn_state,
+                    "上次状态": last_player_turn_state
+                })
+                st.session_state["last_player_turn_state"] = current_player_turn_state
+                st.session_state.game_manager._process_gameloop_state()
+                require_update = True
+                    
+        elif current_gameloop_state == "opponent_turn":
+            # 检查对手回合状态是否变更    
+            if current_opponent_turn_state != last_opponent_turn_state:
+                debug_utils.log("process_game_loop", "对手回合状态变更", {
+                    "当前状态": current_opponent_turn_state, 
+                    "上次状态": last_opponent_turn_state
+                })
+                st.session_state["last_opponent_turn_state"] = current_opponent_turn_state
+                st.session_state.game_manager._process_gameloop_state()
+                require_update = True
+
     finally:
         st.session_state.processing_state = False
 
-    # 检查是否有命令正在执行
-    if game_manager.is_executing_commands():
-        current, total = game_manager.get_current_command_progress()
-        progress_text = f"执行命令 {current}/{total}"
-        st.progress(current / total, text=progress_text)
-        # 执行下一个命令
-        has_next_command = await game_manager.async_process_next_command()
-        require_update = True
- 
-    # 检查是否有LLM响应
-    if st.session_state.ai_input:
-        await _process_user_input_ai(st.session_state.ai_input)     # 注意这里要await,让出执行权
-        st.session_state.ai_input = ""
-        require_update = True
-
-    # 检查状态是否需要自动过渡
-    game_state = st.session_state.game_manager.get_game_state()
-    current_gameloop_state = game_state.get("gameloop_state", "welcome")
-    current_player_turn_state = game_state.get("player_turn_state", "init")
-    current_opponent_turn_state = game_state.get("opponent_turn_state", "init")
-    last_gameloop_state = st.session_state.get("last_gameloop_state", "welcome")
-    last_player_turn_state = st.session_state.get("last_player_turn_state", "end_turn")
-    last_opponent_turn_state = st.session_state.get("last_opponent_turn_state", "end_turn")
-
-    # 检查状态是否发生变化
-    if last_gameloop_state and current_gameloop_state != last_gameloop_state:
-        # 状态变更后执行 process gameloop state
-        debug_utils.log("state", "游戏主循环状态变更", {
-            "当前状态": current_gameloop_state,
-            "上次状态": last_gameloop_state
-        })
-        st.session_state["last_gameloop_state"] = current_gameloop_state
-        st.session_state.game_manager._process_gameloop_state()
-        require_update = True
-
-    if current_gameloop_state == "player_turn":
-        # 检查玩家回合状态是否变更
-        if current_player_turn_state != last_player_turn_state:
-            debug_utils.log("state", "玩家回合状态变更", {
-                "当前状态": current_player_turn_state,
-                "上次状态": last_player_turn_state
-            })
-            st.session_state["last_player_turn_state"] = current_player_turn_state
-            st.session_state.game_manager._process_gameloop_state()
-            require_update = True
-                
-    elif current_gameloop_state == "opponent_turn":
-        # 检查对手回合状态是否变更    
-        if current_opponent_turn_state != last_opponent_turn_state:
-            debug_utils.log("state", "对手回合状态变更", {
-                "当前状态": current_opponent_turn_state, 
-                "上次状态": last_opponent_turn_state
-            })
-            st.session_state["last_opponent_turn_state"] = current_opponent_turn_state
-            st.session_state.game_manager._process_gameloop_state()
-            require_update = True
-    
-    # # 更新状态
-    # st.session_state["last_gameloop_state"] = current_gameloop_state
-    # st.session_state["last_player_turn_state"] = current_player_turn_state
-    # st.session_state["last_opponent_turn_state"] = current_opponent_turn_state
-
     return require_update
 
-def debug_state_loop(self):
+def debug_state_loop():
     """输出详细的状态信息用于调试"""
+    game_state = st.session_state.game_manager.get_game_state()
     debug_utils.log("state_debug", "状态循环检查", {
-        "当前状态": self.game_state.get("gameloop_state"),
+        "当前状态": game_state.get("gameloop_state", "welcome"),
         "上次状态": st.session_state.get("last_gameloop_state"),
         "处理锁": st.session_state.get("processing_state"),
         "最后更新时间": st.session_state.get("last_update_time"),
