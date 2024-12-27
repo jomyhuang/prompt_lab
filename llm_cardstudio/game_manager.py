@@ -1070,3 +1070,18 @@ class GameManager:
         except Exception as e:
             print(f"处理卡牌选择失败: {str(e)}")
             return False
+
+    def interrupt_command_sequence(self):
+        """中断当前命令序列"""
+        # 清空命令序列
+        self.command_sequence['commands'] = []
+        self.command_sequence['current_index'] = 0
+        self.command_sequence['is_executing'] = False
+        self.command_sequence['is_paused'] = False
+        
+        # 清空卡牌选择状态
+        self.selected_attacker = None
+        self.selected_target = None
+        
+        # 添加中断消息到游戏日志
+        debug_utils.log("game", "命令序列已中断")

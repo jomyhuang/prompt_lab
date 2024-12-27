@@ -43,7 +43,9 @@ def update_ui_state():
     # if st.session_state.get("require_rerun", False):
     #     st.session_state.require_rerun = False
     #     st.rerun()
-    st.rerun()
+    st.session_state.require_update = True
+    # st.rerun()
+
 
 def render_sidebar_controls(game_state, gameloop_state):
     """渲染侧边栏控制界面"""
@@ -500,13 +502,25 @@ def start_card_selection(selection_type: str, valid_cards: list, player_type: st
     }
     st.session_state.card_selection_active = True
 
-def end_card_selection():
-    """结束卡牌选择流程"""
+def end_card_selection(cancel: bool = False):
+    """结束卡牌选择
+    
+    Args:
+        cancel: 是否是取消选择
+    """
     selected_card_id = st.session_state.card_selection.get("selected_card_id")
-    if selected_card_id:
-        # 调用GameManager的处理函数
+    
+    if cancel:
+        # 如果是取消选择,中断当前命令序列
+        st.session_state.game_manager.interrupt_command_sequence()
+        st.session_state.game_manager.add_game_message("❌ 已取消当前行动")
+        # 强制触发游戏循环更新
+        st.session_state.require_update = True
+    elif selected_card_id:
+        # 如果是确认选择,调用GameManager的处理函数
         st.session_state.game_manager.handle_card_selection(selected_card_id)
-        
+
+    # 清理选择状态
     st.session_state.card_selection = {
         "is_selecting": False,
         "selection_type": None,
@@ -515,6 +529,7 @@ def end_card_selection():
         "selected_card_id": None,
         "message": None
     }
+    # 重置卡牌选择活动状态
     st.session_state.card_selection_active = False
 
 def render_card_selection():
@@ -555,13 +570,21 @@ def render_card_selection():
         )
         selection["selected_card_id"] = card_id
 
+        # 创建按钮列
+        button_cols = st.columns([1, 1])
+        
         # 确认按钮
-        if st.button("确认选择", key="confirm_selection", use_container_width=True):
-            if selection["selected_card_id"]:
-                # 确保在调用end_card_selection之前设置选中的卡牌ID
-                st.session_state.card_selection["selected_card_id"] = card_id
-                end_card_selection()
-
+        with button_cols[0]:
+            if st.button("确认选择", key="confirm_selection", use_container_width=True):
+                if selection["selected_card_id"]:
+                    # 确保在调用end_card_selection之前设置选中的卡牌ID
+                    st.session_state.card_selection["selected_card_id"] = card_id
+                    end_card_selection()
+        
+        # 放弃按钮
+        with button_cols[1]:
+            if st.button("放弃行动", key="cancel_selection", use_container_width=True, type="secondary"):
+                end_card_selection(cancel=True)
 
 async def _process_game_loop():
     """处理游戏循环"""
@@ -678,6 +701,11 @@ async def _process_game_loop():
                 st.session_state.game_manager._process_gameloop_state()
                 require_update = True
 
+        # 如果需要强制更新,重置标志并更新界面
+        if st.session_state.get("require_update", False):
+            st.session_state.require_update = False
+            require_update = True
+
     finally:
         st.session_state.processing_state = False
 
@@ -706,7 +734,11 @@ async def main():
         render_action_view()
 
         if await _process_game_loop():
-            update_ui_state()
+            # 如果需要更新,重置标志并重新渲染
+            # update_ui_state()
+            st.session_state.require_update = False
+            print(f"_process_game_loop rerun {time.time()}")
+            st.rerun()
 
 if __name__ == '__main__':
 
