@@ -339,7 +339,8 @@ class GameManager:
     def start_game(self):
         """开始新游戏"""
         self.game_state["gameloop_state"] = "start_game"
-        self._process_gameloop_state()
+        # self._process_gameloop_state()
+        # 更新UI
 
     def _ai_thinking(self, message, duration=0.5):
         """模拟AI思考过程
@@ -348,7 +349,7 @@ class GameManager:
             duration: 思考时间（秒）
         """
         self.add_game_message(f"🤖AI 正在思考: {message}")
-        self._player_phase_transition(duration)
+        # self._player_phase_transition(duration)
 
     def save_game(self, save_name):
         """保存游戏状态到文件
@@ -602,6 +603,7 @@ class GameManager:
     def _process_gameloop_state(self):
         """处理游戏主循环状态"""
         gameloop_state = self.game_state.get("gameloop_state", "welcome")
+        print(f"处理游戏主循环状态: {gameloop_state}")
         
         if gameloop_state == "welcome":
             # 等待玩家按下开始游戏按钮
@@ -611,21 +613,18 @@ class GameManager:
             # 游戏开始初始化
             self._process_game_start()
             self.game_state["gameloop_state"] = "deal_cards"
-            st.rerun()
             return True
             
         elif gameloop_state == "deal_cards":
             # 发牌阶段
             self._process_deal_cards()
             self.game_state["gameloop_state"] = "determine_first"
-            st.rerun()
             return True
             
         elif gameloop_state == "determine_first":
             # 决定首轮玩家
             self._process_determine_first()
             self.game_state["gameloop_state"] = "new_turn"
-            st.rerun()
             return True
             
         elif gameloop_state == "new_turn":
@@ -633,41 +632,37 @@ class GameManager:
             self._process_new_turn()
             if self.game_state["turn_info"]["active_player"] == "player":
                 self.game_state["gameloop_state"] = "player_turn"
+                self.game_state["player_turn_state"] = "start"
             else:
                 self.game_state["gameloop_state"] = "opponent_turn"
-            st.rerun()
+                self.game_state["opponent_turn_state"] = "start"
             return True
             
         elif gameloop_state == "player_turn":
             # 玩家回合
             if self._process_player_turn():
                 self.game_state["gameloop_state"] = "next_turn"
-                
-            st.rerun()
-            return True
+                return True
             
         elif gameloop_state == "opponent_turn":
             # 对手回合
             if self._process_opponent_turn():
                 self.game_state["gameloop_state"] = "next_turn"
-            st.rerun()
-            return True
-            
+                return True
+
         elif gameloop_state == "next_turn":
             # 进入下一回合
             self._process_next_turn()
             self.game_state["gameloop_state"] = "new_turn"
-            st.rerun()
             return True
             
         elif gameloop_state == "end_game":
             # 游戏结束
             self._process_end_game()
             self.game_state["gameloop_state"] = "welcome"
-            st.rerun()
             return True
 
-        # return state changed?    
+        # 返回 状态是否变更?
         return False
 
     def _process_player_turn(self):
@@ -677,7 +672,7 @@ class GameManager:
         """
         # 获取当前玩家回合状态
         player_turn_state = self.game_state.get("player_turn_state", "start")
-        
+        print(f"处理玩家回合状态: {player_turn_state}")
         if player_turn_state == "start":
             # 回合开始阶段
             self.add_game_message("🎮 **你的回合开始了！**")
@@ -692,6 +687,7 @@ class GameManager:
             return False
             
         elif player_turn_state == "action":
+            print("玩家行动阶段 action")
             # 玩家行动阶段
             # 等待玩家操作，由界面控制
             return False
@@ -699,7 +695,7 @@ class GameManager:
         elif player_turn_state == "end_turn":
             # 回合结束阶段
             self.add_game_message("🔄 **你的回合结束了**")
-            self.game_state["player_turn_state"] = "start"
+            # self.game_state["player_turn_state"] = "start"
             return True
             
         return False
@@ -707,7 +703,7 @@ class GameManager:
     def _process_opponent_turn(self):
         """处理对手回合"""
         opponent_turn_state = self.game_state.get("opponent_turn_state", "start")
-        
+        print(f"处理对手回合状态: {opponent_turn_state}")
         if opponent_turn_state == "start":
             # 回合开始阶段
             self.add_game_message("🤖 **对手回合开始...**")
@@ -728,6 +724,7 @@ class GameManager:
             self._ai_thinking("正在计算最佳行动...")
             
             if self.ai_decide_playcard():
+                print("对手回合 action 打牌")
                 # 对手简单AI：随机打一张手牌
                 opponent_hand = self.game_state["hand_cards"]["opponent"]
                 if opponent_hand:
@@ -741,6 +738,8 @@ class GameManager:
                         card_to_play = random.choice(playable_cards)
                         # 使用卡牌
                         self.play_card(card_to_play["id"], "opponent")
+            else:
+                print("🤖 对手不想打牌")
                         
             self.game_state["opponent_turn_state"] = "action_2"
             return False
@@ -750,6 +749,7 @@ class GameManager:
             # 使用完手牌后，AI决定是否攻击
             self._ai_thinking("思考是否发起攻击...", 0.5)
             if self.ai_decide_attack():
+                print("对手回合 action_2 发起攻击")
                 # 获取AI场上的卡牌
                 ai_field_cards = self.game_state["field_cards"]["opponent"]
                 if not ai_field_cards:
@@ -778,6 +778,8 @@ class GameManager:
                     
                     if attack_success:
                         self.add_game_message(f"🤖 对手使用 {attacker_card['name']} 发起攻击")
+            else:
+                print("🤖 对手不想发起攻击")
             
             self.game_state["opponent_turn_state"] = "end_turn"
             return False
@@ -786,10 +788,12 @@ class GameManager:
             # 回合结束阶段
             self._ai_thinking("回合结束...", 1.5)
             self.add_game_message("🔄 **对手回合结束**")
-            self.game_state["opponent_turn_state"] = "start"
+            # self.game_state["opponent_turn_state"] = "start"
             self.game_state["gameloop_state"] = "next_turn"
             return True
             
+        # print(f"对手回合状态处理结束 {opponent_turn_state}")
+
         return False
 
     def start_command_sequence(self, commands: List[Dict]):
