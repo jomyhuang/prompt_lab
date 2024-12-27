@@ -589,62 +589,79 @@ class GameManager:
         Returns:
             bool: 攻击是否成功执行
         """
-        # 检查是否是第一回合
-        if self.game_state["turn_info"]["current_turn"] == 1:
-            self.add_game_message("❌ 第一回合不能进行攻击")
-            return False
-            
-        # 检查是否已经攻击过
-        if self.game_state.get("has_attacked_this_turn", False):
-            self.add_game_message("❌ 本回合已经攻击过了")
-            return False
-
-        # 获取当前玩家类型
-        # player_type = self.game_state.get("current_player", "player")
-
-        # 检查场上是否至少一张以上的卡牌
-        player_field = self.game_state["field_cards"][player_type]
-        if not player_field:
-            self.add_game_message("❌ 没有可攻击的卡牌，无法攻击")
-            return False
 
         # 构建命令序列
         command_sequence = []
-        
-        # 如果没有指定攻击者,添加选择攻击者命令
-        if not attacker_card_id:
+        prepare_attack = True
+
+        # 1. 检查是否是第一回合
+        if self.game_state["turn_info"]["current_turn"] == 1:
             command_sequence.append({
-                "action": "SELECT_ATTACKER_HMI",
-                "params": {
+                "action": "SHOW_MESSAGE",
+                "parameters": {
+                    "message": "❌ 第一回合不能进行攻击"
+                }
+            })
+            prepare_attack = False
+            
+        # 2. 检查是否已经攻击过
+        if self.game_state.get("has_attacked_this_turn", False):
+            command_sequence.append({
+                "action": "SHOW_MESSAGE",
+                "parameters": {
+                    "message": "❌ 本回合已经攻击过了"
+                }
+            })
+            prepare_attack = False
+
+        # 3. 检查场上是否至少一张以上的卡牌
+        player_field = self.game_state["field_cards"][player_type]
+        if not player_field:
+            command_sequence.append({
+                "action": "SHOW_MESSAGE",
+                "parameters": {
+                    "message": "❌ 没有可攻击的卡牌，无法攻击"
+                }
+            })
+            prepare_attack = False
+
+        if prepare_attack:
+            # 如果没有指定攻击者,添加选择攻击者命令
+            if not attacker_card_id:
+                command_sequence.append({
+                    "action": "SELECT_ATTACKER_HMI",
+                    "parameters": {
+                        "player_type": player_type
+                    }
+                })
+                
+            # 如果没有指定目标,添加选择目标命令
+            if not target_card_id:
+                command_sequence.append({
+                    "action": "SELECT_TARGET_HMI",
+                    "parameters": {
+                        "player_type": player_type,
+                        "target_type": "opponent"
+                    }
+                })
+                
+            # 添加执行攻击命令
+            command_sequence.append({
+                "action": "PERFORM_ATTACK",
+                "parameters": {
+                    "attacker_id": attacker_card_id,
+                    "target_id": target_card_id,
                     "player_type": player_type
                 }
             })
             
-        # 如果没有指定目标,添加选择目标命令
-        if not target_card_id:
-            command_sequence.append({
-                "action": "SELECT_TARGET_HMI",
-                "params": {
-                    "player_type": player_type,
-                    "target_type": "opponent"
-                }
-            })
-            
-        # 添加执行攻击命令
-        command_sequence.append({
-            "action": "PERFORM_ATTACK",
-            "params": {
-                "attacker_id": attacker_card_id,
-                "target_id": target_card_id,
-                "player_type": player_type
-            }
-        })
-        
         # 启动命令序列
         if command_sequence:
             success = self.start_command_sequence(command_sequence)
-            # 记录已攻击标记
-            self.game_state["has_attacked_this_turn"] = True
+            if prepare_attack:
+                # 记录已攻击标记
+                self.game_state["has_attacked_this_turn"] = True
+
             return success
         
         return False

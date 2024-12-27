@@ -323,7 +323,8 @@ def process_user_input(user_input):
         # 如果是攻击的操作
         elif "攻击" in user_input:
             result = st.session_state.game_manager.player_perform_attack()
-            # If return false, BUGFIX: 无法继续执行
+            # 如果return False, BUGFIX: 无法继续执行(无法主动刷新)
+            # 使用指令命令序列输出错误, 触发更新
     
         # 如果是结束回合的操作，直接结束回合
         elif "结束" in user_input and "回合" in user_input:
@@ -560,7 +561,7 @@ def render_card_selection():
                 # 确保在调用end_card_selection之前设置选中的卡牌ID
                 st.session_state.card_selection["selected_card_id"] = card_id
                 end_card_selection()
-                # st.rerun()  # 强制重新渲染界面
+
 
 async def _process_game_loop():
     """处理游戏循环"""

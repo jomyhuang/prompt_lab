@@ -176,13 +176,11 @@ class CommandProcessor:
 
     def _handle_show_message(self, params: Dict[str, Any]) -> bool:
         """处理显示消息指令"""
-        print("进入 _handle_show_message 函数")
-        print("显示消息指令处理成功")
-        return True
         
         message = params.get('message')
         if message:
             self.game_manager.add_game_message(message)
+        print("显示消息_handle_show_message指令处理成功")
         return True
 
     def _handle_create_card(self, params: Dict[str, Any]) -> bool:
