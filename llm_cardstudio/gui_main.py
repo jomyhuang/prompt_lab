@@ -494,7 +494,7 @@ def add_user_input_ai(message):
     add_user_message(message)
     st.session_state.ai_input = message
 
-def start_card_selection(selection_type: str, valid_cards: list, player_type: str, message: str = None, can_skip: bool = False):
+def start_card_selection(selection_type: str, valid_cards: list, player_type: str, message: str = None):
     """开始卡牌选择流程
     
     Args:
@@ -502,7 +502,6 @@ def start_card_selection(selection_type: str, valid_cards: list, player_type: st
         valid_cards: 可选择的卡牌列表
         player_type: 玩家类型 (player/opponent)
         message: 显示的提示信息
-        can_skip: 是否可以放弃选择
     """
     st.session_state.card_selection = {
         "is_selecting": True,
@@ -510,8 +509,7 @@ def start_card_selection(selection_type: str, valid_cards: list, player_type: st
         "valid_cards": valid_cards,
         "player_type": player_type,
         "selected_card_id": None,
-        "message": message,
-        "can_skip": can_skip
+        "message": message
     }
     st.session_state.card_selection_active = True
 
@@ -644,7 +642,6 @@ async def _process_game_loop():
                 selection_state = game_manager.command_sequence_state.get('awaiting_selection')
                 if selection_state:
                     selection_type = selection_state.get('type')
-                    can_skip = selection_state.get('can_skip', False)
                     progress_text = f"等待选择{selection_type}... ({current}/{total})"
                     
                     # 检查是否需要启动卡牌选择模式

@@ -177,12 +177,11 @@ class CommandProcessor:
     def _handle_show_message(self, params: Dict[str, Any]) -> bool:
         """处理显示消息指令"""
         print("进入 _handle_show_message 函数")
-        print("显示消息指令处理成功")
-        return True
-        
+
         message = params.get('message')
         if message:
-            self.game_manager.add_game_message(message)
+            self.game_manager.add_game_message(f"💬 {message}")
+        print("显示消息指令处理成功")
         return True
 
     def _handle_create_card(self, params: Dict[str, Any]) -> bool:
@@ -787,7 +786,7 @@ class CommandProcessor:
         try:
             # 检查是否被中断
             if self.game_manager.command_sequence_state.get('is_interrupted'):
-                print("命令序列已被中断")
+                print("命令序列已被中���")
                 return False
                 
             # 检查是否暂停
@@ -887,76 +886,11 @@ class CommandProcessor:
             # self.game_manager.add_game_message(error_message)
             return False
 
-    def _handle_select_hand_card(self, params: Dict[str, Any]) -> bool:
-        """处理选择手牌指令"""
-        print("进入 _handle_select_hand_card 函数")
-        
-        player_type = params.get('player_type', 'player')
-        can_skip = params.get('can_skip', True)
-        
-        try:
-            # 获取手牌列表
-            hand_cards = self.game_manager.game_state['hand_cards'][player_type]
-            
-            if not hand_cards:
-                self.game_manager.add_game_message("❌ 手牌为空")
-                return False
-                
-            # 暂停命令序列,等待用户选择
-            self.game_manager.command_sequence_state.update({
-                'is_paused': True,
-                'awaiting_selection': {
-                    'type': 'hand',
-                    'valid_cards': hand_cards,
-                    'player_type': player_type,
-                    'can_skip': can_skip
-                }
-            })
-            
-            return True
-            
-        except Exception as e:
-            print(f"选择手牌失败: {str(e)}")
-            return False
-            
-    def _handle_select_opponent_hand(self, params: Dict[str, Any]) -> bool:
-        """处理选择对手手牌指令"""
-        print("进入 _handle_select_opponent_hand 函数")
-        
-        player_type = params.get('player_type', 'opponent')
-        can_skip = params.get('can_skip', True)
-        
-        try:
-            # 获取对手手牌列表
-            opponent_hand = self.game_manager.game_state['hand_cards'][player_type]
-            
-            if not opponent_hand:
-                self.game_manager.add_game_message("❌ 对手手牌为空")
-                return False
-                
-            # 暂停命令序列,等待用户选择
-            self.game_manager.command_sequence_state.update({
-                'is_paused': True,
-                'awaiting_selection': {
-                    'type': 'opponent_hand',
-                    'valid_cards': opponent_hand,
-                    'player_type': player_type,
-                    'can_skip': can_skip
-                }
-            })
-            
-            return True
-            
-        except Exception as e:
-            print(f"选择对手手牌失败: {str(e)}")
-            return False
-
     def _handle_select_attacker_hmi(self, params: Dict[str, Any]) -> bool:
         """处理HMI选择攻击者指令"""
         print("进入 _handle_select_attacker_hmi 函数")
         
         player_type = params.get('player_type', 'player')
-        can_skip = params.get('can_skip', True)  # 是否可以放弃选择
         
         try:
             # 获取场上可用的攻击者列表
@@ -972,8 +906,7 @@ class CommandProcessor:
                 'awaiting_selection': {
                     'type': 'attacker',
                     'valid_cards': field_cards,
-                    'player_type': player_type,
-                    'can_skip': can_skip
+                    'player_type': player_type
                 }
             })
             
@@ -988,7 +921,6 @@ class CommandProcessor:
         print("进入 _handle_select_target_hmi 函数")
         
         player_type = params.get('player_type', 'player')
-        can_skip = params.get('can_skip', True)  # 是否可以放弃选择
         
         try:
             # 获取对手场上的卡牌作为可能的目标
@@ -1009,8 +941,7 @@ class CommandProcessor:
                 'awaiting_selection': {
                     'type': 'target',
                     'valid_cards': target_cards,
-                    'player_type': opponent_type,
-                    'can_skip': can_skip
+                    'player_type': opponent_type
                 }
             })
             
@@ -1018,4 +949,64 @@ class CommandProcessor:
             
         except Exception as e:
             print(f"选择目标失败: {str(e)}")
+            return False
+
+    def _handle_select_hand_card(self, params: Dict[str, Any]) -> bool:
+        """处理选择手牌指令"""
+        print("进入 _handle_select_hand_card 函数")
+        
+        player_type = params.get('player_type', 'player')
+        
+        try:
+            # 获取手牌列表
+            hand_cards = self.game_manager.game_state['hand_cards'][player_type]
+            
+            if not hand_cards:
+                self.game_manager.add_game_message("❌ 手牌为空")
+                return False
+                
+            # 暂停命令序列,等待用户选择
+            self.game_manager.command_sequence_state.update({
+                'is_paused': True,
+                'awaiting_selection': {
+                    'type': 'hand',
+                    'valid_cards': hand_cards,
+                    'player_type': player_type
+                }
+            })
+            
+            return True
+            
+        except Exception as e:
+            print(f"选择手牌失败: {str(e)}")
+            return False
+            
+    def _handle_select_opponent_hand(self, params: Dict[str, Any]) -> bool:
+        """处理选择对手手牌指令"""
+        print("进入 _handle_select_opponent_hand 函数")
+        
+        player_type = params.get('player_type', 'opponent')
+        
+        try:
+            # 获取对手手牌列表
+            opponent_hand = self.game_manager.game_state['hand_cards'][player_type]
+            
+            if not opponent_hand:
+                self.game_manager.add_game_message("❌ 对手手牌为空")
+                return False
+                
+            # 暂停命令序列,等待用户选择
+            self.game_manager.command_sequence_state.update({
+                'is_paused': True,
+                'awaiting_selection': {
+                    'type': 'opponent_hand',
+                    'valid_cards': opponent_hand,
+                    'player_type': player_type
+                }
+            })
+            
+            return True
+            
+        except Exception as e:
+            print(f"选择对手手牌失败: {str(e)}")
             return False
