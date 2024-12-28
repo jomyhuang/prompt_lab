@@ -771,8 +771,6 @@ async def main():
 
         if await _process_game_loop():
             # 如果需要更新,重置标志并重新渲染
-            # update_ui_state()
-            st.session_state.require_update = False
             print(f"_process_game_loop rerun {time.time()}")
             st.rerun()
 

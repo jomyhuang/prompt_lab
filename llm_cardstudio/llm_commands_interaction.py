@@ -786,7 +786,7 @@ class CommandProcessor:
         try:
             # 检查是否被中断
             if self.game_manager.command_sequence_state.get('is_interrupted'):
-                print("命令序列已被中���")
+                print("async_process_single_command 命令序列已被中断")
                 return False
                 
             # 检查是否暂停
@@ -799,7 +799,7 @@ class CommandProcessor:
             
             # 输出命令信息
             debug_message = (
-                f"执行命令: {action}\n"
+                f"执行命令: async_process_single_command {action}\n"
                 f"参数: {json.dumps(parameters, ensure_ascii=False, indent=2)}"
             )
             print(debug_message)
@@ -828,7 +828,7 @@ class CommandProcessor:
             return True
             
         except Exception as e:
-            error_message = f"❌ 命令执行出错: {str(e)}"
+            error_message = f"❌ async_process_single_command Exception 命令执行出错: {str(e)}"
             print(error_message)
             return False
 
@@ -852,7 +852,6 @@ class CommandProcessor:
                 f"参数: {json.dumps(parameters, ensure_ascii=False, indent=2)}"
             )
             print(debug_message)
-            # self.game_manager.add_game_message(debug_message)
             
             # 执行命令
             handler = self.command_handlers.get(action)
@@ -866,7 +865,6 @@ class CommandProcessor:
             if not success:
                 error_message = f"❌ 执行命令失败: {action}"
                 print(error_message)
-                # self.game_manager.add_game_message(error_message)
                 return False
                 
             # 处理持续时间
@@ -876,7 +874,6 @@ class CommandProcessor:
             # 添加成功消息
             success_message = f"✅ 命令执行成功: {action}"
             print(success_message)
-            # self.game_manager.add_game_message(success_message)
             
             return True
             

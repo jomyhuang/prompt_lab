@@ -873,12 +873,6 @@ class GameManager:
         while self.command_sequence['is_executing']:
                 has_next_command =  self.process_next_command()
                 await asyncio.sleep(0)
-                # has_next_command =  self.async_process_next_command()
-                # command = commands[self.command_sequence['current_index']]
-                # duration = command.get('duration', 1)
-                # # if duration > 0:
-                # #     await asyncio.sleep(duration)
-                # #     # time.sleep(duration)
                 if not has_next_command:
                     break
         
