@@ -24,9 +24,13 @@ class CommandProcessor:
             'CHECK_CONDITION': self._handle_check_condition,
             'SELECT_ATTACKER': self._handle_select_attacker,
             'SELECT_TARGET': self._handle_select_target,
+            'SELECT_HAND_CARD': self._handle_select_hand_card,
+            'SELECT_OPPONENT_HAND': self._handle_select_opponent_hand,
             'PERFORM_ATTACK': self._handle_perform_attack,
             'APPLY_DAMAGE': self._handle_apply_damage,
-            'CHECK_AND_DESTROY': self._handle_check_and_destroy
+            'CHECK_AND_DESTROY': self._handle_check_and_destroy,
+            'SELECT_ATTACKER_HMI': self._handle_select_attacker_hmi,
+            'SELECT_TARGET_HMI': self._handle_select_target_hmi
         }
         
         self.effect_handlers = {
@@ -549,29 +553,39 @@ class CommandProcessor:
     def _handle_perform_attack(self, params: Dict[str, Any]) -> bool:
         """处理执行攻击指令"""
         print("进入 _handle_perform_attack 函数")
+        debug_utils.log("attack", "执行攻击指令", params)
         
         try:
             # 获取攻击者和目标
             attacker = self.game_manager.game_state.get('selected_attacker')
             target = self.game_manager.game_state.get('selected_target')
+            player_type = params.get('player_type', 'player')
             
             if not attacker or not target:
+                debug_utils.log("attack", "攻击失败", {"原因": "未选择攻击者或目标"})
                 self.game_manager.add_game_message("❌ 请先选择攻击者和目标")
                 return False
             
             # 计算伤害
             damage = attacker.get('attack', 0)
+            debug_utils.log("attack", "计算伤害", {"攻击者": attacker.get('name'), "伤害值": damage})
             
-            if target['type'] == 'hero':
+            if target.get('type') == 'hero':
                 # 直接攻击英雄
                 opponent_stats = self.game_manager.game_state['opponent_stats']
                 opponent_stats['hp'] = max(0, opponent_stats['hp'] - damage)
                 self.game_manager.add_game_message(f"⚔️ {attacker.get('name', '未知卡牌')} 对对手英雄造成了 {damage} 点伤害")
+                debug_utils.log("attack", "攻击英雄", {
+                    "攻击者": attacker.get('name'),
+                    "伤害": damage,
+                    "剩余生命": opponent_stats['hp']
+                })
                 
                 # 检查游戏是否结束
                 if opponent_stats['hp'] <= 0:
                     self.game_manager.add_game_message("🎉 游戏结束，你获得了胜利！")
                     self.game_manager.game_state['gameloop_state'] = 'game_over'
+                    debug_utils.log("game", "游戏结束", {"获胜者": player_type})
             else:
                 # 攻击卡牌
                 target_hp = target.get('health', 0)
@@ -582,21 +596,42 @@ class CommandProcessor:
                 attacker['health'] = attacker.get('health', 0) - target_attack
                 
                 self.game_manager.add_game_message(f"⚔️ {attacker.get('name', '未知卡牌')} 与 {target.get('name', '未知卡牌')} 进行了战斗")
+                debug_utils.log("attack", "卡牌战斗", {
+                    "攻击者": {
+                        "名称": attacker.get('name'),
+                        "造成伤害": damage,
+                        "受到伤害": target_attack,
+                        "剩余生命": attacker['health']
+                    },
+                    "防御者": {
+                        "名称": target.get('name'),
+                        "造成伤害": target_attack,
+                        "受到伤害": damage,
+                        "剩余生命": target['health']
+                    }
+                })
                 
                 # 检查卡牌是否死亡
                 if target['health'] <= 0:
+                    debug_utils.log("attack", "卡牌死亡", {"卡牌": target.get('name'), "所属": "对手"})
                     self._move_to_graveyard(target, 'opponent')
                 if attacker['health'] <= 0:
-                    self._move_to_graveyard(attacker, 'player')
+                    debug_utils.log("attack", "卡牌死亡", {"卡牌": attacker.get('name'), "所属": player_type})
+                    self._move_to_graveyard(attacker, player_type)
             
+            # 设置攻击标记
+            self.game_manager.game_state["has_attacked_this_turn"] = True
             # 清除选择状态
             self.game_manager.game_state.pop('selected_attacker', None)
             self.game_manager.game_state.pop('selected_target', None)
+            debug_utils.log("attack", "攻击完成", {"状态": "成功"})
             
             return True
             
         except Exception as e:
-            print(f"执行攻击失败: {str(e)}")
+            error_message = f"执行攻击失败: {str(e)}"
+            print(error_message)
+            debug_utils.log("attack", "攻击异常", {"错误": str(e)})
             return False
 
     def _move_to_graveyard(self, card: Dict[str, Any], owner: str):
@@ -750,6 +785,15 @@ class CommandProcessor:
             bool: 命令是否执行成功
         """
         try:
+            # 检查是否被中断
+            if self.game_manager.command_sequence_state.get('is_interrupted'):
+                print("命令序列已被中断")
+                return False
+                
+            # 检查是否暂停
+            while self.game_manager.command_sequence_state.get('is_paused'):
+                await asyncio.sleep(0.1)
+                
             action = command.get('action')
             parameters = command.get('parameters', {})
             duration = command.get('duration', 1)
@@ -760,7 +804,6 @@ class CommandProcessor:
                 f"参数: {json.dumps(parameters, ensure_ascii=False, indent=2)}"
             )
             print(debug_message)
-            # self.game_manager.add_game_message(debug_message)
             
             # 执行命令
             handler = self.command_handlers.get(action)
@@ -774,24 +817,20 @@ class CommandProcessor:
             if not success:
                 error_message = f"❌ 执行命令失败: {action}"
                 print(error_message)
-                # self.game_manager.add_game_message(error_message)
                 return False
                 
             # 处理持续时间
-            # bug: 如果duration > 0, 会导致命令序列无法执行
             if duration > 0:
                 await asyncio.sleep(duration)
             
             # 添加成功消息
             success_message = f"✅ 命令执行成功: {action}"
             print(success_message)
-            # self.game_manager.add_game_message(success_message)
             return True
             
         except Exception as e:
             error_message = f"❌ 命令执行出错: {str(e)}"
             print(error_message)
-            # self.game_manager.add_game_message(error_message)
             return False
 
     def process_single_command(self, command: Dict[str, Any]) -> bool:
@@ -846,4 +885,137 @@ class CommandProcessor:
             error_message = f"❌ 命令执行出错: {str(e)}"
             print(error_message)
             # self.game_manager.add_game_message(error_message)
+            return False
+
+    def _handle_select_hand_card(self, params: Dict[str, Any]) -> bool:
+        """处理选择手牌指令"""
+        print("进入 _handle_select_hand_card 函数")
+        
+        player_type = params.get('player_type', 'player')
+        can_skip = params.get('can_skip', True)
+        
+        try:
+            # 获取手牌列表
+            hand_cards = self.game_manager.game_state['hand_cards'][player_type]
+            
+            if not hand_cards:
+                self.game_manager.add_game_message("❌ 手牌为空")
+                return False
+                
+            # 暂停命令序列,等待用户选择
+            self.game_manager.command_sequence_state.update({
+                'is_paused': True,
+                'awaiting_selection': {
+                    'type': 'hand',
+                    'valid_cards': hand_cards,
+                    'player_type': player_type,
+                    'can_skip': can_skip
+                }
+            })
+            
+            return True
+            
+        except Exception as e:
+            print(f"选择手牌失败: {str(e)}")
+            return False
+            
+    def _handle_select_opponent_hand(self, params: Dict[str, Any]) -> bool:
+        """处理选择对手手牌指令"""
+        print("进入 _handle_select_opponent_hand 函数")
+        
+        player_type = params.get('player_type', 'opponent')
+        can_skip = params.get('can_skip', True)
+        
+        try:
+            # 获取对手手牌列表
+            opponent_hand = self.game_manager.game_state['hand_cards'][player_type]
+            
+            if not opponent_hand:
+                self.game_manager.add_game_message("❌ 对手手牌为空")
+                return False
+                
+            # 暂停命令序列,等待用户选择
+            self.game_manager.command_sequence_state.update({
+                'is_paused': True,
+                'awaiting_selection': {
+                    'type': 'opponent_hand',
+                    'valid_cards': opponent_hand,
+                    'player_type': player_type,
+                    'can_skip': can_skip
+                }
+            })
+            
+            return True
+            
+        except Exception as e:
+            print(f"选择对手手牌失败: {str(e)}")
+            return False
+
+    def _handle_select_attacker_hmi(self, params: Dict[str, Any]) -> bool:
+        """处理HMI选择攻击者指令"""
+        print("进入 _handle_select_attacker_hmi 函数")
+        
+        player_type = params.get('player_type', 'player')
+        can_skip = params.get('can_skip', True)  # 是否可以放弃选择
+        
+        try:
+            # 获取场上可用的攻击者列表
+            field_cards = self.game_manager.game_state['field_cards'][player_type]
+            
+            if not field_cards:
+                self.game_manager.add_game_message("❌ 场上没有可用的攻击者")
+                return False
+                
+            # 暂停命令序列,等待用户选择
+            self.game_manager.command_sequence_state.update({
+                'is_paused': True,
+                'awaiting_selection': {
+                    'type': 'attacker',
+                    'valid_cards': field_cards,
+                    'player_type': player_type,
+                    'can_skip': can_skip
+                }
+            })
+            
+            return True
+            
+        except Exception as e:
+            print(f"选择攻击者失败: {str(e)}")
+            return False
+            
+    def _handle_select_target_hmi(self, params: Dict[str, Any]) -> bool:
+        """处理HMI选择目标指令"""
+        print("进入 _handle_select_target_hmi 函数")
+        
+        player_type = params.get('player_type', 'player')
+        can_skip = params.get('can_skip', True)  # 是否可以放弃选择
+        
+        try:
+            # 获取对手场上的卡牌作为可能的目标
+            opponent_type = "opponent" if player_type == "player" else "player"
+            target_cards = self.game_manager.game_state['field_cards'][opponent_type]
+            
+            # 添加攻击英雄选项
+            target_cards = list(target_cards)  # 创建副本
+            target_cards.append({
+                'id': 'opponent_hero',
+                'name': '对手英雄',
+                'type': 'hero'
+            })
+            
+            # 暂停命令序列,等待用户选择
+            self.game_manager.command_sequence_state.update({
+                'is_paused': True,
+                'awaiting_selection': {
+                    'type': 'target',
+                    'valid_cards': target_cards,
+                    'player_type': opponent_type,
+                    'can_skip': can_skip
+                }
+            })
+            
+            return True
+            
+        except Exception as e:
+            print(f"选择目标失败: {str(e)}")
             return False

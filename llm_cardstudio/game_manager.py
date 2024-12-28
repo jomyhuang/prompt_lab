@@ -18,15 +18,23 @@ class GameManager:
         # 初始化命令处理器
         from llm_commands_interaction import CommandProcessor
         self.commands_processor = CommandProcessor(self)
-
+        
         # 初始化命令序列状态
+        self.command_sequence_state = {
+            'is_paused': False,
+            'is_interrupted': False,
+            'awaiting_selection': None,
+            'current_command': None
+        }
+        
+        # 初始化命令序列
         if 'command_sequence' not in st.session_state:
             st.session_state.command_sequence = {
                 'commands': [],
                 'current_index': 0,
                 'is_executing': False
             }
-            
+        
         # 初始化游戏消息
         if 'game_messages' not in st.session_state:
             st.session_state.game_messages = []
@@ -304,6 +312,12 @@ class GameManager:
         
         # 重置攻击标记
         self.game_state["has_attacked_this_turn"] = False
+        debug_utils.log("turn", "重置回合状态", {
+            "回合数": self.game_state["turn_info"]["current_turn"],
+            "玩家": active_player,
+            "能量": max_energy,
+            "攻击标记": False
+        })
         
         self.add_game_message(
             f"🎯 **第{self.game_state['turn_info']['current_turn']}回合 - {'你的' if active_player == 'player' else '对手'}回合**\n"
@@ -316,10 +330,14 @@ class GameManager:
         next_player = "opponent" if current_player == "player" else "player"
         self.game_state["turn_info"]["active_player"] = next_player
         
+        # 重置攻击标记
+        self.game_state["has_attacked_this_turn"] = False
+        
         debug_utils.log("game", "回合切换", {
             "当前玩家": current_player,
             "下一个玩家": next_player,
-            "回合数": self.game_state["turn_info"]["current_turn"]
+            "回合数": self.game_state["turn_info"]["current_turn"],
+            "攻击标记": False
         })
 
     def _process_end_game(self):
@@ -488,12 +506,10 @@ class GameManager:
             debug_utils.log("game", "获取存档列表失败", {"错误": str(e)})
             return []
 
-    def perform_attack(self, attacker_card_id: str, target_card_id: str = None, player_type: str = "player") -> bool:
-        """执行攻击动作
+    def player_perform_attack(self, player_type: str = "player") -> bool:
+        """玩家执行攻击动作
         
         Args:
-            attacker_card_id: 攻击者卡牌ID
-            target_card_id: 目标卡牌ID，如果为None或为"opponent_hero"则直接攻击对手
             player_type: 攻击方，可选值："player" 或 "opponent"
             
         Returns:
@@ -502,126 +518,26 @@ class GameManager:
         # 检查是否是第一回合
         if self.game_state["turn_info"]["current_turn"] == 1:
             self.add_game_message("❌ 第一回合不能进行攻击")
+            debug_utils.log("attack", "攻击失败", {"原因": "第一回合不能攻击"})
             return False
             
         # 检查是否已经攻击过
-        if player_type == "player" and self.game_state.get("has_attacked_this_turn", False):
-            self.add_game_message("❌ 本回合已经攻击过了")
-            return False
-            
-        # 获取攻击者卡牌
-        attacker_field = self.game_state["field_cards"][player_type]
-        attacker_card = next((card for card in attacker_field if card["id"] == attacker_card_id), None)
-        if not attacker_card:
-            self.add_game_message("❌ 找不到指定的攻击者卡牌")
-            return False
-            
-        # 获取目标卡牌（如果有）
-        target_card = None
-        if target_card_id and target_card_id != "opponent_hero":
-            opponent_type = "opponent" if player_type == "player" else "player"
-            opponent_field = self.game_state["field_cards"][opponent_type]
-            target_card = next((card for card in opponent_field if card["id"] == target_card_id), None)
-            if not target_card:
-                self.add_game_message("❌ 找不到指定的目标卡牌")
-                return False
-
-        # 构建攻击命令序列
-        command_sequence = []
-        
-        # 1. 选择攻击者
-        command_sequence.append({
-            "action": "SELECT_ATTACKER",
-            "parameters": {
-                "card_id": attacker_card["id"],
-                "player_type": player_type
-            },
-            "duration": 0.5
-        })
-        
-        # 2. 如果有目标卡牌，选择目标
-        if target_card:
-            command_sequence.append({
-                "action": "SELECT_TARGET",
-                "parameters": {
-                    "card_id": target_card["id"],
-                    "target_type": "opponent" if player_type == "player" else "player"
-                },
-                "duration": 0.5
-            })
-        else:
-            # 直接攻击英雄
-            command_sequence.append({
-                "action": "SELECT_TARGET",
-                "parameters": {
-                    "target_type": "opponent_hero"
-                },
-                "duration": 0.5
-            })
-        
-        # 3. 执行攻击
-        command_sequence.append({
-            "action": "PERFORM_ATTACK",
-            "parameters": {
-                "attacker_id": attacker_card["id"],
-                "target_id": target_card["id"] if target_card else None,
-                "player_type": player_type
-            },
-            "duration": 1.0
-        })
-        
-        # 启动命令序列
-        if command_sequence:
-            success = self.start_command_sequence(command_sequence)
-            # 记录已攻击标记
-            if player_type == "player":
-                self.game_state["has_attacked_this_turn"] = True
-            return success
-                
-        return True
-
-    def new_perform_attack(self, player_type: str = "player") -> bool:
-        """执行攻击动作
-        
-        Args:
-            attacker_card_id: 攻击者卡牌ID
-            target_card_id: 目标卡牌ID，如果为None或为"opponent_hero"则直接攻击对手
-            player_type: 攻击方，可选值："player" 或 "opponent"
-            
-        Returns:
-            bool: 攻击是否成功执行
-        """
-        # 检查是否是第一回合
-        if self.game_state["turn_info"]["current_turn"] == 1:
-            self.add_game_message("❌ 第一回合不能进行攻击")
-            return False
-            
-        # 检查是否已经攻击过
-        if player_type == "player" and self.game_state.get("has_attacked_this_turn", False):
-            self.add_game_message("❌ 本回合已经攻击过了")
+        if self.game_state.get("has_attacked_this_turn", False):
+            self.add_game_message("❌ 本回合已经攻击过了，每回合只能攻击一次")
+            debug_utils.log("attack", "攻击失败", {"原因": "本回合已经攻击过"})
             return False
 
         # 检查己方场上是否有卡牌
         player_field = self.game_state["field_cards"][player_type]
         if not player_field:
             self.add_game_message("❌ 己方场上没有卡牌，不能攻击")
+            debug_utils.log("attack", "攻击失败", {"原因": "场上没有卡牌"})
             return False
-        # # 获取攻击者卡牌
-        # attacker_field = self.game_state["field_cards"][player_type]
-        # attacker_card = next((card for card in attacker_field if card["id"] == attacker_card_id), None)
-        # if not attacker_card:
-        #     self.add_game_message("❌ 找不到指定的攻击者卡牌")
-        #     return False
-            
-        # # 获取目标卡牌（如果有）
-        # target_card = None
-        # if target_card_id and target_card_id != "opponent_hero":
-        #     opponent_type = "opponent" if player_type == "player" else "player"
-        #     opponent_field = self.game_state["field_cards"][opponent_type]
-        #     target_card = next((card for card in opponent_field if card["id"] == target_card_id), None)
-        #     if not target_card:
-        #         self.add_game_message("❌ 找不到指定的目标卡牌")
-        #         return False
+
+        # 重置命令序列状态
+        self.command_sequence_state['is_interrupted'] = False
+        self.command_sequence_state['is_paused'] = False
+        self.command_sequence_state['awaiting_selection'] = None
 
         # 构建攻击命令序列
         command_sequence = []
@@ -630,49 +546,40 @@ class GameManager:
         command_sequence.append({
             "action": "SELECT_ATTACKER_HMI",
             "parameters": {
-                "card_id": "SELECT_ATTACKER_HMI",
-                "player_type": player_type
+                "player_type": player_type,
+                "can_skip": True  # 允许放弃选择
             },
             "duration": 0.5
         })
         
-        # 2. 如果有目标卡牌，选择目标
-        if target_card:
-            command_sequence.append({
-                "action": "SELECT_TARGET",
-                "parameters": {
-                    "card_id": target_card["id"],
-                    "target_type": "opponent" if player_type == "player" else "player"
-                },
-                "duration": 0.5
-            })
-        else:
-            # 直接攻击英雄
-            command_sequence.append({
-                "action": "SELECT_TARGET",
-                "parameters": {
-                    "target_type": "opponent_hero"
-                },
-                "duration": 0.5
-            })
+        # 2. HMI选择目标
+        command_sequence.append({
+            "action": "SELECT_TARGET_HMI",
+            "parameters": {
+                "player_type": player_type,
+                "can_skip": True  # 允许放弃选择
+            },
+            "duration": 0.5
+        })
         
         # 3. 执行攻击
         command_sequence.append({
             "action": "PERFORM_ATTACK",
             "parameters": {
-                "attacker_id": attacker_card["id"],
-                "target_id": target_card["id"] if target_card else None,
                 "player_type": player_type
             },
             "duration": 1.0
         })
         
+        debug_utils.log("attack", "开始攻击流程", {
+            "玩家类型": player_type,
+            "命令序列": command_sequence
+        })
+        
         # 启动命令序列
         if command_sequence:
             success = self.start_command_sequence(command_sequence)
-            # 记录已攻击标记
-            if player_type == "player":
-                self.game_state["has_attacked_this_turn"] = True
+
             return success
                 
         return True
@@ -810,7 +717,6 @@ class GameManager:
             # 抽牌阶段
             self.add_game_message("🎴 **对手抽取了一张卡牌**")
             self.draw_card("opponent")
-            # self._ai_thinking("思考要使用哪张卡牌...")
             self.game_state["opponent_turn_state"] = "action"
             return False
             
@@ -840,7 +746,6 @@ class GameManager:
             return False
 
         elif opponent_turn_state == "action_2":
-            
             # 使用完手牌后，AI决定是否攻击
             self._ai_thinking("思考是否发起攻击...", 0.5)
             if self.ai_decide_attack():
@@ -865,10 +770,9 @@ class GameManager:
                     target_id = random.choice(possible_targets)
                     
                     # 执行攻击
-                    attack_success = self.perform_attack(
+                    attack_success = self.opponent_perform_attack(
                         attacker_card_id=attacker_card["id"],
-                        target_card_id=target_id,
-                        player_type="opponent"
+                        target_card_id=target_id
                     )
                     
                     if attack_success:
@@ -883,25 +787,35 @@ class GameManager:
             # 回合结束阶段
             self._ai_thinking("回合结束...", 1.5)
             self.add_game_message("🔄 **对手回合结束**")
-            # self.game_state["opponent_turn_state"] = "start"
             self.game_state["gameloop_state"] = "next_turn"
             return True
             
-        # print(f"对手回合状态处理结束 {opponent_turn_state}")
-
         return False
 
     def start_command_sequence(self, commands: List[Dict]):
         """开始执行命令序列"""
+        # 重置命令序列状态
+        self.command_sequence_state['is_interrupted'] = False
+        self.command_sequence_state['is_paused'] = False
+        self.command_sequence_state['awaiting_selection'] = None
+        self.command_sequence_state['current_command'] = None
+        
+        # 重置命令序列
         self.command_sequence['commands'] = commands
         self.command_sequence['current_index'] = 0
         self.command_sequence['is_executing'] = True
+        
         print(f"开始执行命令序列，共 {len(commands)} 个命令")
-        # asyncio.create_task(self.async_process_command_sequence_all(commands))
-        # print("启动asyncio命令序列-----")
+        return True
 
     def process_next_command(self) -> bool:
         """处理序列中的下一个命令"""
+        # 检查是否已经中断
+        if self.command_sequence_state.get('is_interrupted'):
+            print("命令序列已被中断")
+            self.command_sequence['is_executing'] = False
+            return False
+            
         if not self.command_sequence['is_executing']:
             return False
             
@@ -977,6 +891,12 @@ class GameManager:
 
     async def async_process_next_command(self) -> bool:
         """处理序列中的下一个命令"""
+        # 检查是否已经中断
+        if self.command_sequence_state.get('is_interrupted'):
+            print("命令序列已被中断")
+            self.command_sequence['is_executing'] = False
+            return False
+
         if not self.command_sequence['is_executing']:
             return False
 
@@ -999,3 +919,182 @@ class GameManager:
         self.add_game_message(f"执行命令: {current_index + 1}/{len(commands)} {command['action']}")
         
         return True  # 返回True 表示还有命令需要执行
+
+    # 命令序列状态管理方法
+    def pause_command_sequence(self):
+        """暂停命令序列"""
+        self.command_sequence_state['is_paused'] = True
+        
+    def resume_command_sequence(self):
+        """恢复命令序列"""
+        self.command_sequence_state['is_paused'] = False
+        self.command_sequence_state['awaiting_selection'] = None
+        
+    def interrupt_command_sequence(self):
+        """中断命令序列"""
+        self.command_sequence_state['is_interrupted'] = True
+        self.command_sequence_state['is_paused'] = False
+        self.command_sequence_state['awaiting_selection'] = None
+        
+    def is_command_sequence_paused(self):
+        """检查命令序列是否暂停"""
+        return self.command_sequence_state.get('is_paused', False)
+        
+    def is_command_sequence_interrupted(self):
+        """检查命令序列是否中断"""
+        return self.command_sequence_state.get('is_interrupted', False)
+        
+    def get_awaiting_selection(self):
+        """获取等待选择的状态"""
+        return self.command_sequence_state.get('awaiting_selection')
+        
+    def set_awaiting_selection(self, selection_state):
+        """设置等待选择的状态"""
+        self.command_sequence_state['awaiting_selection'] = selection_state
+        self.command_sequence_state['is_paused'] = True
+
+    def handle_card_selection(self, selected_card_id: str = None):
+        """处理卡牌选择结果
+        
+        Args:
+            selected_card_id: 选中的卡牌ID,如果为None表示放弃选择
+        """
+        try:
+            # 获取当前等待选择的状态
+            selection_state = self.command_sequence_state.get('awaiting_selection')
+            if not selection_state:
+                print("没有等待中的卡牌选择")
+                return
+                
+            selection_type = selection_state.get('type')
+            
+            if selected_card_id is None:
+                # 如果放弃选择,中断命令序列
+                self.add_game_message("❌ 已放弃当前行")
+                self.interrupt_command_sequence()
+                return
+                
+            # 根据不同的选择类型处理
+            if selection_type == 'attacker':
+                # 保存选中的攻击者
+                self.game_state['selected_attacker'] = next(
+                    (card for card in selection_state['valid_cards'] 
+                     if str(card['id']) == str(selected_card_id)), 
+                    None
+                )
+                self.add_game_message(f"✅ 选择了攻击者: {self.game_state['selected_attacker'].get('name', '未知卡牌')}")
+                
+            elif selection_type == 'target':
+                # 保存选中的目标
+                if selected_card_id == 'opponent_hero':
+                    self.game_state['selected_target'] = {
+                        'type': 'hero',
+                        'owner': 'opponent'
+                    }
+                    self.add_game_message("✅ 选择了攻击目标: 对手英雄")
+                else:
+                    self.game_state['selected_target'] = next(
+                        (card for card in selection_state['valid_cards'] 
+                         if str(card['id']) == str(selected_card_id)), 
+                        None
+                    )
+                    if self.game_state['selected_target']:
+                        self.add_game_message(f"✅ 选择了攻击目标: {self.game_state['selected_target'].get('name', '未知卡牌')}")
+                        
+            elif selection_type in ['hand', 'opponent_hand']:
+                # 保存选中的手牌
+                selected_card = next(
+                    (card for card in selection_state['valid_cards'] 
+                     if str(card['id']) == str(selected_card_id)), 
+                    None
+                )
+                if selected_card:
+                    self.game_state['selected_hand_card'] = selected_card
+                    self.add_game_message(f"✅ 选择了手牌: {selected_card.get('name', '未知卡牌')}")
+            
+            # 恢复命令序列执行
+            self.resume_command_sequence()
+            
+        except Exception as e:
+            print(f"处理卡牌选择失败: {str(e)}")
+            # 发生错误时中断命令序列
+            self.interrupt_command_sequence()
+
+    def opponent_perform_attack(self, attacker_card_id: str, target_card_id: str) -> bool:
+        """AI对手执行攻击动作
+        
+        Args:
+            attacker_card_id: AI攻击者卡牌ID
+            target_card_id: 目标卡牌ID (玩家场上的卡牌或英雄)
+            
+        Returns:
+            bool: 攻击是否成功执行
+        """
+        try:
+            # 检查是否已经攻击过
+            if self.game_state.get("has_attacked_this_turn", False):
+                self.add_game_message("❌ 本回合已经攻击过了")
+                debug_utils.log("attack", "攻击失败", {"原因": "本回合已经攻击过"})
+                return False
+
+            # 获取攻击者卡牌
+            attacker = next((card for card in self.game_state["field_cards"]["opponent"] 
+                            if str(card["id"]) == str(attacker_card_id)), None)
+            if not attacker:
+                self.add_game_message("❌ 找不到AI攻击者卡牌")
+                return False
+            
+            # 处理攻击目标
+            if target_card_id == "opponent_hero":
+                # 直接攻击英雄
+                damage = attacker.get("attack", 0)
+                self.game_state["player_stats"]["hp"] -= damage
+                self.add_game_message(f"⚔️ {attacker['name']} 对玩家英雄造成了 {damage} 点伤害")
+                
+                # 检查游戏是否结束
+                if self.game_state["player_stats"]["hp"] <= 0:
+                    self.add_game_message("🎉 游戏结束！")
+                    self.game_state["gameloop_state"] = "game_over"
+            else:
+                # 攻击场上的卡牌
+                target = next((card for card in self.game_state["field_cards"]["player"] 
+                             if str(card["id"]) == str(target_card_id)), None)
+                             
+                if not target:
+                    self.add_game_message("❌ 找不到目标卡牌")
+                    return False
+                
+                # 计算互相伤害
+                attacker_damage = attacker.get("attack", 0)
+                target_damage = target.get("attack", 0)
+                
+                # 应用伤害
+                target["health"] -= attacker_damage
+                attacker["health"] -= target_damage
+                
+                self.add_game_message(
+                    f"⚔️ {attacker['name']} 与 {target['name']} 进行了战斗\n"
+                    f"{attacker['name']} 造成了 {attacker_damage} 点伤害\n"
+                    f"{target['name']} 造成了 {target_damage} 点伤害"
+                )
+                
+                # 检查卡牌是否死亡
+                if target["health"] <= 0:
+                    self.game_state["field_cards"]["player"].remove(target)
+                    self.deck_state["player"]["discard_pile"].append(target)
+                    self.add_game_message(f"💀 {target['name']} 被击败了")
+                    
+                if attacker["health"] <= 0:
+                    self.game_state["field_cards"]["opponent"].remove(attacker)
+                    self.deck_state["opponent"]["discard_pile"].append(attacker)
+                    self.add_game_message(f"💀 {attacker['name']} 被击败了")
+            
+            # 设置攻击标记
+            self.game_state["has_attacked_this_turn"] = True
+            debug_utils.log("attack", "攻击标记已设置", {"has_attacked_this_turn": True})
+                    
+            return True
+            
+        except Exception as e:
+            print(f"AI执行攻击失败: {str(e)}")
+            return False
