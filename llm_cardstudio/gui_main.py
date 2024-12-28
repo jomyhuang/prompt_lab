@@ -518,6 +518,7 @@ def end_card_selection(cancel: bool = False):
         st.session_state.require_update = True
     elif selected_card_id:
         # 如果是确认选择,调用GameManager的处理函数
+        # 这个很重要! 不能随意更改
         st.session_state.game_manager.handle_card_selection(selected_card_id)
 
     # 清理选择状态
