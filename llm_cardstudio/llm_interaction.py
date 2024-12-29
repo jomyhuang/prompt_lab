@@ -7,6 +7,7 @@ import os
 from dotenv import load_dotenv
 import json
 from langchain.tools import tool
+from langchain_anthropic import ChatAnthropic
 
 # 加载环境变量
 load_dotenv()
@@ -78,23 +79,38 @@ os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY")
 
 class LLMInteraction:
     def __init__(self):
-        if True:
+        use_model= "google"
+        if use_model == "google":
             # 初始化Gemini模型
+            model = "gemini-2.0-flash-exp"
+            # model = os.getenv("GOOGLE_MODEL_NAME", "gemini-pro")
+            # base_url = os.getenv("OPENAI_API_BASE")
             self.llm = ChatGoogleGenerativeAI(
                 api_key=os.getenv("GOOGLE_API_KEY"),
-                model=os.getenv("GOOGLE_MODEL_NAME", "gemini-pro"),  # 从环境变量读取模型名称，默认为gemini-pro
+                model=model,    # 从环境变量读取模型名称，默认为gemini-pro
                 temperature=0,
                 streaming=True
             )
-            print("使用Gemini模型")
+            print(f"使用Gemini模型 {model}")
+        elif use_model == "claude":
+            model = "claude-3-5-sonnet-20241022"
+            base_url = os.getenv("OPENAI_API_BASE")
+            self.llm = ChatAnthropic(
+                model=model,
+                api_key=os.getenv("OPENAI_API_KEY"),
+                base_url=base_url,
+                temperature=0,
+                streaming=True
+            )
+            print(f"使用ChatAnthropic模型 {model}，API BASE URL={base_url}")
         else:
             # 初始化OpenAI模型
             model = "gpt-3.5-turbo-1106"
+            # model=os.getenv("OPENAI_MODEL_NAME", "gpt-4")    # 从环境变量读取模型名称，默认为gpt-4
             base_url = os.getenv("OPENAI_API_BASE")
             self.llm = ChatOpenAI(
                 api_key=os.getenv("OPENAI_API_KEY"),
-                # model=os.getenv("OPENAI_MODEL_NAME", "gpt-4"),  # 从环境变量读取模型名称，默认为gpt-4
-                model=model,  # 从环境变量读取模型名称，默认为gpt-4
+                model=model,
                 base_url=base_url,
                 temperature=0,
                 streaming=True
@@ -181,7 +197,9 @@ class LLMInteraction:
 """
         
         # 先尝试使用带工具的LLM进行响应
+        # simple_context = f"你是一个AI游戏助手，负责管理卡牌游戏的对话和决策。玩家输入: {user_input}"
         print("llm_with_tools.ainvoke:", user_input)
+        # response = self.llm_with_tools.invoke(simple_context)
         response = self.llm_with_tools.invoke(context_str)
         # response = await self.llm_with_tools.ainvoke(context_str)
         # response = await self.llm_with_tools.ainvoke(user_input)
@@ -222,14 +240,17 @@ class LLMInteraction:
                 for r in tool_results:
                     print(r)
             else:
-                print("tool_results is empty")
+                print("tool_results [空]")
         
         # 如果响应中有内容，直接使用
         if hasattr(response, 'content') and response.content:
+            content = response.content
+            # 如果内容是列表，取第一个非空元素
+            if isinstance(content, list):
+                content = next((item for item in content if item and isinstance(item, str)), "")
             # 更新对话历史
-            # self.add_to_history("user", user_input)
-            self.add_to_history("assistant", response.content)
-            return response.content
+            self.add_to_history("assistant", content)
+            return content
             
         # 如果没有工具调用也没有内容，使用普通对话链生成响应
         chat_response = await self.context_chain.ainvoke({
@@ -238,11 +259,15 @@ class LLMInteraction:
             "user_input": user_input
         })
         
-        # 更新对话历史
-        self.add_to_history("user", user_input)
-        self.add_to_history("assistant", chat_response.content)
+        content = chat_response.content
+        # 如果内容是列表，取第一个非空元素
+        if isinstance(content, list):
+            content = next((item for item in content if item and isinstance(item, str)), "")
         
-        return chat_response.content
+        # 更新对话历史
+        self.add_to_history("assistant", content)
+        
+        return content
                 
     def format_history(self):
         """格式化聊天历史"""

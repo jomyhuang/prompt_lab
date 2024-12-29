@@ -52,12 +52,12 @@ class GameManager:
         self.game_state = {
             "gameloop_state": "welcome",  # 游戏主循环状态
             "player_stats": {
-                "hp": 20,
+                "hp": 3,
                 "energy": 3,
                 "armor": 0
             },
             "opponent_stats": {
-                "hp": 20,
+                "hp": 3,
                 "energy": 3,
                 "armor": 0
             },
@@ -340,21 +340,6 @@ class GameManager:
             "攻击标记": False
         })
 
-    def _process_end_game(self):
-        """处理游戏结束"""
-        self._player_phase_transition(1.0)
-        winner = self._determine_winner()
-        self.add_game_message(f"🏆 **游戏结束 - {'你' if winner == 'player' else '对手'}获胜！**")
-        debug_utils.log("game", "游戏结束", {"获胜者": winner})
-
-    def _determine_winner(self):
-        """判断获胜者"""
-        if self.game_state["player_stats"]["hp"] <= 0:
-            return "opponent"
-        elif self.game_state["opponent_stats"]["hp"] <= 0:
-            return "player"
-        return None
-
     def start_game(self):
         """开始新游戏"""
         if not st.session_state.game_manager.selected_decks or \
@@ -617,6 +602,12 @@ class GameManager:
         gameloop_state = self.game_state.get("gameloop_state", "welcome")
         print(f"处理游戏主循环状态: {gameloop_state}")
         
+        # 检查游戏是否结束（除了欢迎和游戏结束状态外）
+        if gameloop_state not in ["welcome", "start_game", "game_over", "restart_game"]:
+            if self._check_game_over():
+                self._process_game_over()
+                return True
+        
         if gameloop_state == "welcome":
             # 等待玩家按下开始游戏按钮
             return False
@@ -668,10 +659,14 @@ class GameManager:
             self.game_state["gameloop_state"] = "new_turn"
             return True
             
-        elif gameloop_state == "end_game":
+        elif gameloop_state == "game_over":
             # 游戏结束
-            self._process_end_game()
-            self.game_state["gameloop_state"] = "welcome"
+            self._process_game_over()
+            return True
+            
+        elif gameloop_state == "restart_game":
+            # 重新开始游戏
+            # self.game_state["gameloop_state"] = "welcome"
             return True
 
         # 返回 状态是否变更?
@@ -1052,13 +1047,8 @@ class GameManager:
             if target_card_id == "opponent_hero":
                 # 直接攻击英雄
                 damage = attacker.get("attack", 0)
-                self.game_state["player_stats"]["hp"] -= damage
+                self.game_state["player_stats"]["hp"] = max(0, self.game_state["player_stats"]["hp"] - damage)
                 self.add_game_message(f"⚔️ {attacker['name']} 对玩家英雄造成了 {damage} 点伤害")
-                
-                # 检查游戏是否结束
-                if self.game_state["player_stats"]["hp"] <= 0:
-                    self.add_game_message("🎉 游戏结束！")
-                    self.game_state["gameloop_state"] = "game_over"
             else:
                 # 攻击场上的卡牌
                 target = next((card for card in self.game_state["field_cards"]["player"] 
@@ -1073,8 +1063,8 @@ class GameManager:
                 target_damage = target.get("attack", 0)
                 
                 # 应用伤害
-                target["health"] -= attacker_damage
-                attacker["health"] -= target_damage
+                target["health"] = max(0, target["health"] - attacker_damage)
+                attacker["health"] = max(0, attacker["health"] - target_damage)
                 
                 self.add_game_message(
                     f"⚔️ {attacker['name']} 与 {target['name']} 进行了战斗\n"
@@ -1105,5 +1095,56 @@ class GameManager:
 
     def end_turn(self):
         """结束当前回合"""
-        self.game_state["player_turn_state"] = "end_turn"
+        if self.game_state["gameloop_state"] != "player_turn":
+            self.add_game_message("❌ 当前不是玩家回合")
+            return False
+        
+        current_player = self.game_state["turn_info"]["active_player"]
+        self.game_state[f"{current_player}_turn_state"] = "end_turn"
         return True
+
+    def _process_game_over(self):
+        """处理游戏结束"""
+        self._player_phase_transition(1.0)
+        
+        winner = self.game_state.get("winner")
+        print(f"游戏结束，获胜者: {winner}")
+        
+        if winner == "player":
+            self.add_game_message("🏆 **游戏结束 - 你获胜了！**")
+        elif winner == "opponent":
+            self.add_game_message("🏆 **游戏结束 - 对手获胜！**")
+        else:  # draw
+            self.add_game_message("🤝 **游戏结束 - 双方平局！**")
+            
+        debug_utils.log("game", "游戏结束", {"获胜者": winner})
+        
+        # 设置游戏状态为重新开始
+        self.game_state["gameloop_state"] = "restart_game"
+
+    def _check_game_over(self) -> bool:
+        """检查游戏是否结束
+        
+        Returns:
+            bool: 如果游戏结束返回True，否则返回False
+        """
+        print(f"检查游戏结束 - 玩家生命值: {self.game_state['player_stats']['hp']}, 对手生命值: {self.game_state['opponent_stats']['hp']}")
+        
+        player_health = self.game_state["player_stats"]["hp"]
+        opponent_health = self.game_state["opponent_stats"]["hp"]
+        
+        # 检查玩家生命值
+        if player_health <= 0:
+            print("玩家生命值归零，对手获胜")
+            self.game_state["gameloop_state"] = "game_over"
+            self.game_state["winner"] = "opponent"
+            return True
+            
+        # 检查对手生命值
+        if opponent_health <= 0:
+            print("对手生命值归零，玩家获胜")
+            self.game_state["gameloop_state"] = "game_over"
+            self.game_state["winner"] = "player"
+            return True
+            
+        return False

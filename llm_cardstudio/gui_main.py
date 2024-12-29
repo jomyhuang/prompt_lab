@@ -91,7 +91,7 @@ def render_sidebar_controls(game_state, gameloop_state):
             
         # 使用expander显示游戏状态
         with st.expander("🔍 查看游戏状态", expanded=True):
-            st.json(game_state)
+            st.json(game_state, expanded=2)
 
 def render_deck_selection():
     """渲染卡组选择界面"""
@@ -159,7 +159,7 @@ def render_deck_selection():
             "player": decks_data[player_deck]['cards'],
             "opponent": decks_data[opponent_deck]['cards']
         }
-        process_user_input("开始游戏")
+        process_command_input("开始游戏")
         return
 
 def render_game_stats(game_state):
@@ -301,10 +301,8 @@ async def _process_user_input_ai(user_input):
                 status.update(label="AI响应完成", state="complete", expanded=False)
                 
         st.session_state.messages.append({"role": "assistant", "content": ai_message})
-        st.session_state.ai_input = ""
-        update_ui_state()
 
-def process_user_input(user_input):
+def process_command_input(user_input):
     """处理用户输入"""
     # 检查是否有命令正在执行
     if st.session_state.game_manager.is_executing_commands():
@@ -320,7 +318,6 @@ def process_user_input(user_input):
         # 如果是开始游戏的操作
         if game_state["gameloop_state"] == "welcome" and "开始" in user_input and "游戏" in user_input:
             st.session_state.game_manager.start_game()
-            # return
         
         # 如果是使用卡牌的操作，将卡牌从手牌移到场上
         elif "使用" in user_input and "卡牌" in user_input:
@@ -332,7 +329,6 @@ def process_user_input(user_input):
                 
                 # 使用卡牌（会自动处理命令）
                 result = st.session_state.game_manager.play_card(selected_card_id)
-            # return
     
         # 如果是攻击的操作
         elif "攻击" in user_input:
@@ -344,7 +340,8 @@ def process_user_input(user_input):
  
         # 如果是结束回合的操作，直接结束回合
         elif "结束" in user_input and "回合" in user_input:
-            st.session_state.game_manager.game_state["player_turn_state"] = "end_turn"
+            st.session_state.game_manager.end_turn()
+            # st.session_state.game_manager.game_state["player_turn_state"] = "end_turn"
 
         # 不理解用户输入
         else:
@@ -384,7 +381,7 @@ def render_action_controls():
             card = next((card for card in sorted_cards if str(card['id']) == selected_card_id), None)
             if card:
                 message = f"我使用{card['name']}卡牌"
-                process_user_input(message)
+                process_command_input(message)
                 return
     
     # 攻击按钮
@@ -400,7 +397,7 @@ def render_action_controls():
             attack_button_text = "⚔️ 第一回合禁止攻击"
         
         if st.button(attack_button_text, key="attack", use_container_width=True, disabled=attack_disabled):
-            process_user_input("我要攻击")
+            process_command_input("我要攻击")
             return
     
     # 建议按钮        
@@ -416,7 +413,7 @@ def render_action_controls():
     with button_cols[3]:
         if st.button("结束回合", key="end_turn", use_container_width=True):
             message = "我要结束当前回合"
-            process_user_input(message)
+            process_command_input(message)
             return
 
     # 显示选中卡牌信息
@@ -492,7 +489,7 @@ def add_assistant_message(message):
 
 def add_user_input_ai(message):
     """添加用户输入AI"""
-    add_user_message(message)
+    # add_user_message(message)
     st.session_state.ai_input = message
 
 def start_card_selection(selection_type: str, valid_cards: list, player_type: str, message: str = None):

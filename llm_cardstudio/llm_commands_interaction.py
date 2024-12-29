@@ -608,20 +608,14 @@ class CommandProcessor:
                     "伤害": damage,
                     "剩余生命": opponent_stats['hp']
                 })
-                
-                # 检查游戏是否结束
-                if opponent_stats['hp'] <= 0:
-                    self.game_manager.add_game_message("🎉 游戏结束，你获得了胜利！")
-                    self.game_manager.game_state['gameloop_state'] = 'game_over'
-                    debug_utils.log("game", "游戏结束", {"获胜者": player_type})
             else:
                 # 攻击卡牌
                 target_hp = target.get('health', 0)
                 target_attack = target.get('attack', 0)
                 
                 # 双方互相造成伤害
-                target['health'] = target_hp - damage
-                attacker['health'] = attacker.get('health', 0) - target_attack
+                target['health'] = max(0, target_hp - damage)
+                attacker['health'] = max(0, attacker.get('health', 0) - target_attack)
                 
                 self.game_manager.add_game_message(f"⚔️ {attacker.get('name', '未知卡牌')} 与 {target.get('name', '未知卡牌')} 进行了战斗")
                 debug_utils.log("attack", "卡牌战斗", {
@@ -696,11 +690,11 @@ class CommandProcessor:
             defender = next((card for card in self.game_manager.game_state['field_cards']['opponent'] 
                            if card['id'] == defender_id), None)
             if defender:
-                defender['health'] = defender['health'] - damage
+                defender['health'] = max(0, defender['health'] - damage)
                 self.game_manager.add_game_message(f"🗡️ {attacker['name']} 对 {defender['name']} 造成了 {damage} 点伤害")
         else:
             # 直接攻击对手
-            self.game_manager.game_state['opponent_stats']['hp'] -= damage
+            self.game_manager.game_state['opponent_stats']['hp'] = max(0, self.game_manager.game_state['opponent_stats']['hp'] - damage)
             self.game_manager.add_game_message(f"🗡️ {attacker['name']} 对对手造成了 {damage} 点伤害")
             
         return True
