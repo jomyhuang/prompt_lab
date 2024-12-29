@@ -4,6 +4,7 @@ import time
 import os
 from debug_utils import debug_utils
 import asyncio
+from langchain.tools import StructuredTool
 
 class CommandProcessor:
     def __init__(self, game_manager):
@@ -45,6 +46,34 @@ class CommandProcessor:
             'card_draw': self._handle_card_draw
         }
         
+        # 加载卡牌命令配置
+        self.commands_config = self._load_commands_config()
+        
+        # 初始化游戏工具
+        self.game_tools = [
+            StructuredTool.from_function(
+                func=self.start_game,
+                name="start_game",
+                description="开始新的游戏"
+            ),
+            StructuredTool.from_function(
+                func=self.end_turn,
+                name="end_turn",
+                description="结束当前回合"
+            ),
+            StructuredTool.from_function(
+                func=self.play_card,
+                name="play_card",
+                description="打出一张手牌"
+            ),
+            StructuredTool.from_function(
+                func=self.attack,
+                name="attack",
+                description="使用卡牌进行攻击"
+            )
+        ]
+        # self.game_tools = [self.start_game, self.end_turn, self.play_card, self.attack]
+
         # 加载卡牌命令配置
         self.commands_config = self._load_commands_config()
 
@@ -564,7 +593,7 @@ class CommandProcessor:
                 debug_utils.log("attack", "攻击失败", {"原因": "未选择攻击者或目标"})
                 self.game_manager.add_game_message("❌ 请先选择攻击者和目标")
                 return False
-            
+                
             # 计算伤害
             damage = attacker.get('attack', 0)
             debug_utils.log("attack", "计算伤害", {"攻击者": attacker.get('name'), "伤害值": damage})
@@ -1007,3 +1036,42 @@ class CommandProcessor:
         except Exception as e:
             print(f"选择对手手牌失败: {str(e)}")
             return False
+            
+    # @tool("start_game")
+    def start_game(self) -> str:
+        """开始新的游戏"""
+        self.game_manager.start_game()
+        return "游戏开始！"
+
+    # @tool("end_turn")
+    def end_turn(self) -> str:
+        """结束当前回合"""
+        self.game_manager.end_turn()
+        return "回合结束。"
+
+    # @tool("play_card")
+    def play_card(self, card_id: str) -> str:
+        """打出一张手牌
+        
+        Args:
+            card_id: 要打出的卡牌ID
+        """
+        if not card_id:
+            return "请指定要打出的卡牌ID"
+        
+        self.game_manager.play_card(card_id)
+        return f"打出卡牌 {card_id}"
+
+    # @tool("attack")
+    def attack(self, attacker_id: str, target_id: str) -> str:
+        """使用卡牌进行攻击
+        
+        Args:
+            attacker_id: 攻击者的卡牌ID
+            target_id: 目标的卡牌ID
+        """
+        if not attacker_id or not target_id:
+            return "请指定攻击者和目标的ID"
+        
+        self.game_manager.attack(attacker_id, target_id)
+        return f"使用 {attacker_id} 攻击 {target_id}"

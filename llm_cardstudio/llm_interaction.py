@@ -5,6 +5,8 @@ from langchain.chains import LLMChain  # 修复导入路径
 import google.generativeai as genai
 import os
 from dotenv import load_dotenv
+import json
+from langchain.tools import tool
 
 # 加载环境变量
 load_dotenv()
@@ -76,32 +78,37 @@ os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY")
 
 class LLMInteraction:
     def __init__(self):
-        if False:
+        if True:
             # 初始化Gemini模型
             self.llm = ChatGoogleGenerativeAI(
                 api_key=os.getenv("GOOGLE_API_KEY"),
                 model=os.getenv("GOOGLE_MODEL_NAME", "gemini-pro"),  # 从环境变量读取模型名称，默认为gemini-pro
-                temperature=0.7,
+                temperature=0,
                 streaming=True
             )
             print("使用Gemini模型")
         else:
             # 初始化OpenAI模型
+            model = "gpt-3.5-turbo-1106"
+            base_url = os.getenv("OPENAI_API_BASE")
             self.llm = ChatOpenAI(
                 api_key=os.getenv("OPENAI_API_KEY"),
-            model=os.getenv("OPENAI_MODEL_NAME", "gpt-4o"),  # 从环境变量读取模型名称，默认为gpt-4o
-            base_url=os.getenv("OPENAI_API_BASE"),
-            temperature=0.7,
+                # model=os.getenv("OPENAI_MODEL_NAME", "gpt-4"),  # 从环境变量读取模型名称，默认为gpt-4
+                model=model,  # 从环境变量读取模型名称，默认为gpt-4
+                base_url=base_url,
+                temperature=0,
                 streaming=True
             )
-            print("使用OpenAI API模型")
+            print(f"使用OpenAI模型 {model}，API BASE URL={base_url}")
+
 
         # 初始化对话历史
         self.chat_history = []
         self.last_game_state = None
-        
+        self.commands_processor = None  # 将在后续设置
+    
         # 设置上下文提示模板
-        context_template = """你是一个卡牌游戏AI助手。基于以下信息帮助玩家:
+        context_template = """你是一个卡牌游戏AI助手。基于以下信息帮助玩家：
         
         当前游戏状态:
         {game_state}
@@ -112,36 +119,131 @@ class LLMInteraction:
         玩家输入:
         {user_input}
         
-        请分析情况并给出建议。注意保持回答简洁明了。
+        你可以使用以下工具：
+        - start_game: 开始新游戏
+        - end_turn: 结束当前回合
+        - play_card: 打出一张手牌
+        - attack: 使用卡牌进行攻击
+        
+        请分析情况并给出建议或执行相应操作。如果玩家的输入不需要执行具体操作，直接给出对话回复即可。
         """
         
         # 使用新的 LLMChain API
         self.context_prompt = ChatPromptTemplate.from_template(context_template)
-        # self.context_chain = LLMChain(llm=self.llm, prompt=self.context_prompt)
-        self.context_chain = self.context_prompt | self.llm        
+        self.context_chain = self.context_prompt | self.llm
 
-        # 初始化动作解析提示模板
-        action_template = """你是一个游戏助手，负责解析玩家的行动。
+    def set_commands_processor(self, processor):
+        """设置命令处理器实例"""
+        self.commands_processor = processor
+        # 绑定工具到LLM
+        if self.commands_processor and hasattr(self.commands_processor, 'game_tools'):
+            tools = [
+                self.commands_processor.start_game,
+                self.commands_processor.end_turn,
+                self.commands_processor.play_card,
+                self.commands_processor.attack
+            ]
+            self.llm_with_tools = self.llm.bind_tools(tools)
+
+    async def generate_ai_response(self, user_input: str, game_state: dict) -> str:
+        """生成AI响应，支持工具调用
         
-        玩家输入: {user_input}
+        Args:
+            user_input: 用户输入
+            game_state: 当前游戏状态
         
-        请解析玩家的意图并给出建议。
+        Returns:
+            str: AI的响应或工具调用的结果
         """
-        self.action_prompt = ChatPromptTemplate.from_template(action_template)
-        # self.action_chain = LLMChain(llm=self.llm, prompt=self.action_prompt)
-        
-        self.action_chain = self.action_prompt | self.llm  # action_chain 使用 | 运算符
-        
+        if not self.commands_processor:
+            return "系统未准备好，请稍后再试"
+            
+        # 确保工具已经绑定
+        if not hasattr(self, 'llm_with_tools'):
+            self.set_commands_processor(self.commands_processor)
+            
+        # 准备上下文消息
+        context_str = f"""游戏状态：
+{json.dumps(game_state, ensure_ascii=False, indent=2)}
 
-        # 初始化AI响应提示模板
-        self.ai_response_prompt = ChatPromptTemplate.from_messages([
-            ("system", "你是一个游戏助手，负责分析游戏状态并给出建议。"),
-            ("human", "{game_state}")
-        ])
-        # self.ai_response_chain = LLMChain(llm=self.llm, prompt=self.ai_response_prompt)
-        self.ai_response_chain = self.ai_response_prompt | self.llm 
-    
-    
+聊天历史：
+{self.format_history()}
+
+玩家输入: {user_input}
+
+你可以使用以下工具：
+- start_game: 开始新游戏
+- end_turn: 结束当前回合
+- play_card: 打出一张手牌
+- attack: 使用卡牌进行攻击
+
+请分析情况并给出建议或执行相应操作。如果玩家的输入不需要执行具体操作，直接给出对话回复即可。
+"""
+        
+        # 先尝试使用带工具的LLM进行响应
+        print("llm_with_tools.ainvoke:", user_input)
+        response = self.llm_with_tools.invoke(context_str)
+        # response = await self.llm_with_tools.ainvoke(context_str)
+        # response = await self.llm_with_tools.ainvoke(user_input)
+        
+        # 检查是否有工具调用
+        if hasattr(response, 'tool_calls') and response.tool_calls:
+            tool_results = []
+            for tool_call in response.tool_calls:
+                # 执行工具调用
+                if isinstance(tool_call, dict):
+                    tool_name = tool_call.get('name')
+                    args = tool_call.get('args', {})
+                else:
+                    tool_name = tool_call.name
+                    args = tool_call.args
+                
+                if tool_name:
+                    # 找到对应的工具
+                    matching_tools = [t for t in self.commands_processor.game_tools if t.name == tool_name]
+                    if matching_tools:
+                        tool = matching_tools[0]
+                        print(f"工具 {tool_name} 调用参数:", args)
+                        try:
+                            # 使用工具的 invoke 方法
+                            result = tool.invoke(args)
+                            tool_results.append(f"工具 {tool_name} 调用结果： {result}")
+                        except Exception as e:
+                            print(f"工具 {tool_name} 调用失败，原因: {str(e)}")
+                            tool_results.append(f"工具 {tool_name} 调用失败，原因: {str(e)}")
+                    else:
+                        print(f"未找到工具: {tool_name}")
+                        print(f"可用工具: {[t.name for t in self.commands_processor.game_tools]}")
+                        tool_results.append(f"未找到工具: {tool_name}")
+            
+            # 打印工具调用结果
+            if tool_results:
+                print("tool_results:")
+                for r in tool_results:
+                    print(r)
+            else:
+                print("tool_results is empty")
+        
+        # 如果响应中有内容，直接使用
+        if hasattr(response, 'content') and response.content:
+            # 更新对话历史
+            # self.add_to_history("user", user_input)
+            self.add_to_history("assistant", response.content)
+            return response.content
+            
+        # 如果没有工具调用也没有内容，使用普通对话链生成响应
+        chat_response = await self.context_chain.ainvoke({
+            "game_state": game_state,
+            "chat_history": self.format_history(),
+            "user_input": user_input
+        })
+        
+        # 更新对话历史
+        self.add_to_history("user", user_input)
+        self.add_to_history("assistant", chat_response.content)
+        
+        return chat_response.content
+                
     def format_history(self):
         """格式化聊天历史"""
         formatted = []
@@ -160,46 +262,6 @@ class LLMInteraction:
         # 添加用户输入到历史记录
         self.add_to_history("user", user_input)
         return user_input  # 简单返回用户输入，后续可以添加更复杂的解析逻辑
-    
-    async def generate_ai_response(self, user_input, game_state):
-        """生成AI响应
-        
-        Args:
-            user_input (str): 用户输入
-            game_state (dict): 当前游戏状态
-            
-        Returns:
-            str: AI的响应
-        """
-        # 更新游戏状态
-        self.last_game_state = game_state
-        
-        # 准备上下文数据
-        context_data = {
-            "game_state": str(game_state),
-            "chat_history": str(self.chat_history),
-            "user_input": user_input
-        }
-        
-        try:
-            # 使用 LLMChain 生成响应
-            response = self.context_chain.invoke(context_data)
-            ai_message = response   #直接返回字符串无需使用 response["text"]
-            # ai_message = response["text"]
-            
-            # 更新对话历史
-            self.chat_history.append({"role": "user", "content": user_input})
-            self.chat_history.append({"role": "assistant", "content": ai_message})
-            
-            # 如果历史记录太长，删除最早的对话
-            if len(self.chat_history) > 10:
-                self.chat_history = self.chat_history[-10:]
-                
-            return ai_message
-            
-        except Exception as e:
-            print(f"生成响应时出错: {str(e)}")
-            return "抱歉，我现在无法正确理解和回应。请稍后再试。"
     
     def clear_history(self):
         """清除对话历史"""

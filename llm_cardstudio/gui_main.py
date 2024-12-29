@@ -17,6 +17,8 @@ if 'initialized' not in st.session_state:
     st.session_state.game_manager = GameManager()
     st.session_state.llm_interaction = LLMInteraction()
     st.session_state.player_manager = PlayerManager()
+    # 设置命令处理器
+    st.session_state.llm_interaction.set_commands_processor(st.session_state.game_manager.commands_processor)
     st.session_state.messages = [{"role": "assistant", "content": "准备好战斗了吗？"}]
     st.session_state.initialized = True
     st.session_state.ai_input = ""
@@ -124,7 +126,7 @@ def render_deck_selection():
                     if card_id in cards_dict:
                         card = cards_dict[card_id]
                         st.write(f"- {card['name']} ({card['type']}, 费用:{card['cost']})")
-    
+
     # 渲染对手卡组选择
     with col2:
         st.markdown("#### 🤖 选择对手卡组")
@@ -144,7 +146,13 @@ def render_deck_selection():
                     if card_id in cards_dict:
                         card = cards_dict[card_id]
                         st.write(f"- {card['name']} ({card['type']}, 费用:{card['cost']})")
-    
+
+    if player_deck and opponent_deck:
+        st.session_state.game_manager.selected_decks = {
+                "player": decks_data[player_deck]['cards'],
+                "opponent": decks_data[opponent_deck]['cards']
+        }
+
     # 开始游戏按钮
     if st.button("开始游戏", key="start_game", use_container_width=True):
         st.session_state.game_manager.selected_decks = {
@@ -281,27 +289,20 @@ def render_game_view():
 
 async def _process_user_input_ai(user_input):
     """AI处理用户输入"""
-    # 检查是否有命令正在执行
-    if st.session_state.game_manager.is_executing_commands():
-        st.session_state.game_manager.add_game_message("❌ 当前有命令正在执行，请等待完成")
-        return
-    # 获取当前游戏状态
-    game_state = st.session_state.game_manager.get_game_state()
-    
-    # 记录调试信息
-    # debug_utils.log("llm", "处理用户输入", { 注意这里我注释了，防止引用错误
-    #     "用户输入": message
-    # })
-    
-    # 显示运行状态
-    status_container = st.container()
-    with status_container:
-        with st.status("AI响应...", state="running", expanded=False) as status:
-            action_result = st.session_state.llm_interaction.parse_user_action(user_input)
-            ai_message = await st.session_state.llm_interaction.generate_ai_response(user_input, game_state)
-
-            status.update(label="AI响应完成", state="complete", expanded=False)
-            st.session_state.messages.append({"role": "assistant", "content": ai_message.content})
+    if user_input:
+        st.session_state.messages.append({"role": "user", "content": user_input})
+        game_state = st.session_state.game_manager.get_game_state()
+        
+        # 显示运行状态
+        status_container = st.container()
+        with status_container:
+            with st.status("AI响应...", state="running", expanded=False) as status:
+                ai_message = await st.session_state.llm_interaction.generate_ai_response(user_input, game_state)
+                status.update(label="AI响应完成", state="complete", expanded=False)
+                
+        st.session_state.messages.append({"role": "assistant", "content": ai_message})
+        st.session_state.ai_input = ""
+        update_ui_state()
 
 def process_user_input(user_input):
     """处理用户输入"""

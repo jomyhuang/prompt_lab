@@ -357,7 +357,17 @@ class GameManager:
 
     def start_game(self):
         """开始新游戏"""
+        if not st.session_state.game_manager.selected_decks or \
+                not st.session_state.game_manager.selected_decks.get("player") or \
+                not st.session_state.game_manager.selected_decks.get("opponent"):
+            print("错误：卡组信息不正确，无法开始游戏")
+            return
+        if self.game_state["gameloop_state"] != "welcome":
+            print("错误：当前不在欢迎阶段，无法开始游戏")
+            return
+
         self.game_state["gameloop_state"] = "start_game"
+        return True
 
     def _ai_thinking(self, message, duration=0.5):
         """模拟AI思考过程
@@ -1092,3 +1102,8 @@ class GameManager:
         except Exception as e:
             print(f"AI执行攻击失败: {str(e)}")
             return False
+
+    def end_turn(self):
+        """结束当前回合"""
+        self.game_state["player_turn_state"] = "end_turn"
+        return True
