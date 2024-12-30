@@ -95,7 +95,9 @@ class LLMInteraction:
         elif use_model == "claude":
             model = "claude-3-5-sonnet-20241022"
             base_url = os.getenv("OPENAI_API_BASE")
-            self.llm = ChatAnthropic(
+            # small.AI (tool calling 错误)
+            # self.llm = ChatAnthropic(
+            self.llm = ChatOpenAI(
                 model=model,
                 api_key=os.getenv("OPENAI_API_KEY"),
                 base_url=base_url,
@@ -107,15 +109,15 @@ class LLMInteraction:
             # 初始化OpenAI模型
             model = "deepseek-chat"
             # model=os.getenv("OPENAI_MODEL_NAME", "gpt-4")    # 从环境变量读取模型名称，默认为gpt-4
-            base_url = os.getenv("OPENAI_API_BASE")
+            base_url = os.getenv("DEEPSEEK_API_BASE")
             self.llm = ChatOpenAI(
-                api_key=os.getenv("OPENAI_API_KEY"),
+                api_key=os.getenv("DEEPSEEK_API_KEY"),
                 model=model,
                 base_url=base_url,
                 temperature=0,
                 streaming=True
             )
-            print(f"使用OpenAI模型 {model}，API BASE URL={base_url}")
+            print(f"使用DeepSeek官方模型 {model}，API BASE URL={base_url}")
         else:
             # 初始化OpenAI模型
             model = "gpt-3.5-turbo-1106"
@@ -213,6 +215,7 @@ class LLMInteraction:
         # simple_context = f"你是一个AI游戏助手，负责管理卡牌游戏的对话和决策。玩家输入: {user_input}"
         print("llm_with_tools.ainvoke:", user_input)
         # response = self.llm_with_tools.invoke(simple_context)
+        # response = self.llm_with_tools.invoke(context_str).tool_calls
         response = self.llm_with_tools.invoke(context_str)
         # response = await self.llm_with_tools.ainvoke(context_str)
         # response = await self.llm_with_tools.ainvoke(user_input)
