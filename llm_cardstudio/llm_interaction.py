@@ -79,7 +79,7 @@ os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY")
 
 class LLMInteraction:
     def __init__(self):
-        use_model= "google"
+        use_model= "deepseek"
         if use_model == "google":
             # 初始化Gemini模型
             model = "gemini-2.0-flash-exp"
@@ -103,6 +103,19 @@ class LLMInteraction:
                 streaming=True
             )
             print(f"使用ChatAnthropic模型 {model}，API BASE URL={base_url}")
+        elif use_model == "deepseek":
+            # 初始化OpenAI模型
+            model = "deepseek-chat"
+            # model=os.getenv("OPENAI_MODEL_NAME", "gpt-4")    # 从环境变量读取模型名称，默认为gpt-4
+            base_url = os.getenv("OPENAI_API_BASE")
+            self.llm = ChatOpenAI(
+                api_key=os.getenv("OPENAI_API_KEY"),
+                model=model,
+                base_url=base_url,
+                temperature=0,
+                streaming=True
+            )
+            print(f"使用OpenAI模型 {model}，API BASE URL={base_url}")
         else:
             # 初始化OpenAI模型
             model = "gpt-3.5-turbo-1106"
