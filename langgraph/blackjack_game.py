@@ -146,26 +146,28 @@ def player_turn(state: GameState) -> GameState:
     # 只在玩家回合且游戏未结束时等待操作
     if state["current_turn"] == "player" and not state["game_over"]:
         # 准备展示给玩家的游戏状态信息
-        game_info = {
-            "message": "Your turn! Hit or Stand?",
-            "player_info": {
-                "cards": state["player_cards"],
-                "score": state["player_score"]
-            },
-            "dealer_info": {
-                "visible_card": state["dealer_cards"][0],  # 只显示第一张牌
-                "hidden_cards": len(state["dealer_cards"]) - 1,  # 其余牌数
-                "visible_score": calculate_hand([state["dealer_cards"][0]])  # 只计算可见牌的分数
-            },
-            "game_stats": {
-                "player_wins": state["player_wins"],
-                "dealer_wins": state["dealer_wins"]
-            }
-        }
+        # game_info = {
+        #     "message": "Your turn! Hit or Stand?",
+        #     "player_info": {
+        #         "cards": state["player_cards"],
+        #         "score": state["player_score"]
+        #     },
+        #     "dealer_info": {
+        #         "visible_card": state["dealer_cards"][0],  # 只显示第一张牌
+        #         "hidden_cards": len(state["dealer_cards"]) - 1,  # 其余牌数
+        #         "visible_score": calculate_hand([state["dealer_cards"][0]])  # 只计算可见牌的分数
+        #     },
+        #     "game_stats": {
+        #         "player_wins": state["player_wins"],
+        #         "dealer_wins": state["dealer_wins"]
+        #     }
+        # }
         
         # 使用interrupt等待玩家操作
         # 此处会暂停执行 直到收到玩家的操作指令
-        action = interrupt(game_info)
+        # action = interrupt(game_info)
+        # 检查: 目前传入值为exceptiong 捕获的value值, 用途状况不明
+        action = interrupt("interrupt from player_turn ----")
         
         # 处理玩家操作
         if action == "hit":
@@ -397,6 +399,7 @@ def main():
                 # 使用graph.invoke初始化游戏状态
                 config = {"configurable": {"thread_id": st.session_state.thread_id}}
                 st.session_state.game_state = st.session_state.graph.invoke(initial_state, config=config)
+
                 st.rerun()
     
     else:
@@ -453,8 +456,6 @@ def main():
                         config = {"configurable": {"thread_id": st.session_state.thread_id}}
                         st.session_state.game_state = st.session_state.graph.invoke(
                             Command(resume="hit"), config=config)
-                        print("after invoke resume")
-                        print(st.session_state.game_state)
                     st.rerun()
                 
                 elif action == "stand":

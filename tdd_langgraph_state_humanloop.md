@@ -111,34 +111,128 @@ graph.add_edge("route", END)
 ## 3. Human-in-loop实现
 
 ### 3.1 基本流程
-1. 准备状态信息
-2. 调用interrupt()暂停
-3. 等待用户输入
-4. 通过Command恢复
-5. 处理用户操作
-6. 更新状态
+1. 启用checkpointer
+2. 准备状态信息
+3. 调用interrupt()暂停
+4. 等待用户输入
+5. 通过Command恢复
+6. 处理用户操作
+7. 更新状态
 
-### 3.2 Command处理
+### 3.2 Checkpointer配置
 ```python
-def process_user_action(action: str) -> Command:
-    """处理用户操作并创建Command对象"""
-    valid_actions = ["hit", "stand"]
-    if action not in valid_actions:
-        raise ValueError(f"Invalid action: {action}")
-        
-    return Command(resume=action)
+from langgraph.checkpoint.memory import MemorySaver
+import random
+
+# 1. 创建checkpointer
+checkpointer = MemorySaver()
+
+# 2. 创建带thread_id的配置
+thread_id = str(random.randint(1, 1000000))
+config = {"configurable": {"thread_id": thread_id}}
+
+# 3. 创建图时启用checkpointer
+graph = build_graph(checkpointer=checkpointer)
+
+# 4. 使用config调用图
+initial_state = init_game()
+result = graph.invoke(initial_state, config=config)
 ```
 
-### 3.3 最佳实践
+注意事项:
+1. interrupt()必须启用checkpointer才能使用
+2. 使用thread_id标识不同的执行流
+3. 可以选择不同的存储后端(如MemorySaver或LocalStateCheckpointer)
+4. 建议在生产环境使用持久化存储
+
+### 3.3 Human-in-loop节点实现
+```python
+def player_turn(state: GameState) -> GameState:
+    """Human-in-loop节点实现
+    
+    关键点:
+    1. 检查游戏状态
+    2. 准备展示信息
+    3. 使用interrupt暂停
+    4. 处理用户操作
+    5. 更新游戏状态
+    """
+    if state["current_turn"] == "player" and not state["game_over"]:
+        # 准备展示给玩家的游戏状态信息
+        game_info = {
+            "message": "Your turn! Hit or Stand?",
+            "player_info": {
+                "cards": state["player_cards"],
+                "score": state["player_score"]
+            },
+            "dealer_info": {
+                "visible_card": state["dealer_cards"][0],
+                "hidden_cards": len(state["dealer_cards"]) - 1,
+                "visible_score": calculate_hand([state["dealer_cards"][0]])
+            },
+            "game_stats": {
+                "player_wins": state["player_wins"],
+                "dealer_wins": state["dealer_wins"]
+            }
+        }
+        
+        # 使用interrupt等待玩家操作
+        action = interrupt(game_info)
+        
+        # 处理玩家操作
+        if action == "hit":
+            # 抽一张牌
+            new_card = state["deck"].pop()
+            state["player_cards"].append(new_card)
+            state["player_score"] = calculate_hand(state["player_cards"])
+            
+            # 检查是否爆牌
+            if state["player_score"] > 21:
+                state["message"] = f"Bust! You drew {new_card} and went over 21!"
+                state["game_over"] = True
+                state["dealer_wins"] += 1
+            else:
+                state["message"] = f"You drew {new_card}. Hit or Stand?"
+                
+        elif action == "stand":
+            state["current_turn"] = "dealer"
+            state["message"] = f"You stand with {state['player_score']}. Dealer's turn..."
+    
+    return state
+```
+
+### 3.4 状态恢复
+```python
+def handle_player_action(action: str):
+    """处理玩家操作并同步状态"""
+    try:
+        # 创建Command并调用图
+        command = Command(resume=action)
+        config = {"configurable": {"thread_id": st.session_state.thread_id}}
+        result = st.session_state.graph.invoke(command, config=config)
+        
+        # 同步状态
+        st.session_state.game_state = result
+        st.session_state.require_update = True
+    except Exception as e:
+        st.error(f"Action processing error: {str(e)}")
+```
+
+### 3.5 最佳实践
 1. interrupt()使用:
-- 只传必要信息
+- 只传必要的游戏信息
 - 明确定义有效操作
-- 正确使用Command
+- 使用thread_id标识执行流
 
 2. 状态同步:
-- interrupt()返回后立即同步
+- interrupt()返回后立即更新状态
 - Command恢复前验证状态
-- 保持更新一致性
+- 保持session_state同步
+
+3. 错误处理:
+- 捕获并处理异常
+- 提供友好错误信息
+- 保持状态一致性
 
 ## 4. Streamlit集成
 
