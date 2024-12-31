@@ -1,3 +1,4 @@
+# Import required libraries
 import streamlit as st
 import random
 from typing import TypedDict, Literal, Optional, List
@@ -8,29 +9,59 @@ import time
 from poker_component import render_cards
 from game_controls import render_action_buttons, render_game_stats, render_game_message
 
-# 定义卡牌
-SUITS = ["♠", "♥", "♦", "♣"]
-RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
+# Define card suits and ranks
+SUITS = ["♠", "♥", "♦", "♣"]  # 黑桃 红心 方块 梅花
+RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]  # A到K的点数
 
-# 定义游戏状态类型
+# Define game state type
 class GameState(TypedDict):
-    current_turn: Literal["player", "dealer"]
-    player_cards: List[str]
-    dealer_cards: List[str]
-    deck: List[str]
-    message: str
-    game_over: bool
-    player_score: int
-    dealer_score: int
-    last_action: Optional[str]
-    player_wins: int
-    dealer_wins: int
-    player_info: Optional[dict]
-    dealer_info: Optional[dict]
-    checking: str
+    """Game state type definition.
+    
+    Attributes:
+        current_turn: Current player's turn (player or dealer)
+        player_cards: List of player's cards
+        dealer_cards: List of dealer's cards
+        deck: Remaining cards in deck
+        message: Game message
+        game_over: Whether game is over
+        player_score: Player's current score
+        dealer_score: Dealer's current score
+        last_action: Last action taken
+        player_wins: Number of player wins
+        dealer_wins: Number of dealer wins
+        player_info: Player information dictionary
+        dealer_info: Dealer information dictionary
+        checking: State check flag
+    """
+    current_turn: Literal["player", "dealer"]  # 当前回合的玩家(player或dealer)
+    player_cards: List[str]  # 玩家手牌列表
+    dealer_cards: List[str]  # 庄家手牌列表
+    deck: List[str]  # 剩余牌堆
+    message: str  # 游戏消息
+    game_over: bool  # 游戏是否结束
+    player_score: int  # 玩家当前点数
+    dealer_score: int  # 庄家当前点数
+    last_action: Optional[str]  # 最后执行的动作
+    player_wins: int  # 玩家胜场数
+    dealer_wins: int  # 庄家胜场数
+    player_info: Optional[dict]  # 玩家信息字典
+    dealer_info: Optional[dict]  # 庄家信息字典
+    checking: str  # 检查状态标记
 
 def calculate_hand(cards: List[str]) -> int:
-    """计算手牌点数"""
+    """Calculate hand value.
+    
+    Calculation rules:
+    - Number cards (2-10) are worth their face value
+    - Face cards (J Q K) are worth 10
+    - Aces are worth 1 or 11, whichever is more advantageous
+    
+    Args:
+        cards: List of cards to calculate
+        
+    Returns:
+        int: Total hand value
+    """
     value = 0
     aces = 0
     
@@ -53,7 +84,16 @@ def calculate_hand(cards: List[str]) -> int:
     return value
 
 def init_game() -> GameState:
-    """初始化游戏状态"""
+    """Initialize game state.
+    
+    Creates a new game state including:
+    1. Shuffling and creating a new deck
+    2. Dealing initial cards to player and dealer
+    3. Initializing game-related states
+    
+    Returns:
+        GameState: Initialized game state
+    """
     # 创建新牌组
     deck = [f"{rank}{suit}" for suit in SUITS for rank in RANKS]
     random.shuffle(deck)
@@ -78,14 +118,36 @@ def init_game() -> GameState:
     )
 
 def player_turn(state: GameState) -> GameState:
-    """处理玩家回合
-    使用interrupt等待玩家操作,实现Human-in-loop模式
+    """Handle player's turn with Human-in-loop implementation.
+    
+    This is a key Human-in-loop node that uses langgraph's interrupt mechanism
+    for human-computer interaction. When it's player's turn, the game flow
+    pauses here waiting for player input.
+    
+    Workflow:
+    1. Check if it's player's turn and game is not over
+    2. Prepare game state info to show player (cards, scores, etc)
+    3. Use interrupt to pause execution, wait for player action (hit/stand)
+    4. Update game state based on player's action
+    5. Return updated state to continue game flow
+    
+    Human-in-loop implementation points:
+    - Use interrupt() function to pause execution
+    - Package game state as dictionary to pass to frontend
+    - Wait for player selection in UI
+    - Resume with Command(resume=action)
+    
+    Args:
+        state: Current game state
+        
+    Returns:
+        Updated game state
     """
     # 只在玩家回合且游戏未结束时等待操作
     if state["current_turn"] == "player" and not state["game_over"]:
         # 准备展示给玩家的游戏状态信息
         game_info = {
-            "message": "Your turn! Hit or Stand? ---------RIGHT HERE",
+            "message": "Your turn! Hit or Stand?",
             "player_info": {
                 "cards": state["player_cards"],
                 "score": state["player_score"]
@@ -98,14 +160,12 @@ def player_turn(state: GameState) -> GameState:
             "game_stats": {
                 "player_wins": state["player_wins"],
                 "dealer_wins": state["dealer_wins"]
-            },
-            "checking": "this is a test"
+            }
         }
         
         # 使用interrupt等待玩家操作
-        print( f" action = !! beforeinterrupt")
+        # 此处会暂停执行 直到收到玩家的操作指令
         action = interrupt(game_info)
-        print( f" action = !! interrupt {action}")
         
         # 处理玩家操作
         if action == "hit":
@@ -114,7 +174,6 @@ def player_turn(state: GameState) -> GameState:
             state["player_cards"].append(new_card)
             state["player_score"] = calculate_hand(state["player_cards"])
             
-            state["checking"] = "this is a test after hit"
             # 检查是否爆牌
             if state["player_score"] > 21:
                 state["message"] = f"Bust! You drew {new_card} and went over 21!"
@@ -130,7 +189,18 @@ def player_turn(state: GameState) -> GameState:
     return state
 
 def dealer_turn(state: GameState) -> GameState:
-    """处理庄家回合"""
+    """Handle dealer's turn.
+    
+    Dealer follows a fixed strategy:
+    - Continue drawing cards until score is 17 or higher
+    - Then stop and determine the winner
+    
+    Args:
+        state: Current game state
+        
+    Returns:
+        Updated game state
+    """
     if state["current_turn"] == "dealer" and not state["game_over"]:
         # 庄家继续抽牌直到17点或以上
         while state["dealer_score"] < 17:
@@ -157,21 +227,52 @@ def dealer_turn(state: GameState) -> GameState:
     return state
 
 def should_end(state: GameState) -> bool:
-    """检查是否应该结束当前回合"""
-    # 只有在游戏结束时才返回True
+    """Check if current round should end.
+    
+    Args:
+        state: Current game state
+        
+    Returns:
+        bool: Whether game should end
+    """
     return state["game_over"]
 
 def build_graph(checkpointer=None) -> StateGraph:
-    """构建游戏流程图"""
+    """Build game flow graph.
+    
+    Uses LangGraph to build state transition graph for Blackjack:
+    
+    1. Create StateGraph based on GameState
+    2. Add player turn and dealer turn nodes
+    3. Set up edges and conditions between nodes
+    
+    Game flow:
+    START -> player_turn -> dealer_turn -> END
+    
+    State transition rules:
+    - player_turn node:
+      * hit: stay in player_turn
+      * stand: go to dealer_turn
+      * bust: go directly to END
+    - dealer_turn node:
+      * game over: go to END
+      * otherwise: return to player_turn
+    
+    Args:
+        checkpointer: Optional state checkpoint saver
+        
+    Returns:
+        Compiled game flow graph
+    """
     # 创建StateGraph
     workflow = StateGraph(GameState)
     
     # 添加节点
-    workflow.add_node("player_turn", player_turn)
-    workflow.add_node("dealer_turn", dealer_turn)
+    workflow.add_node("player_turn", player_turn)  # 玩家回合节点
+    workflow.add_node("dealer_turn", dealer_turn)  # 庄家回合节点
     
     # 设置边和条件
-    workflow.add_edge(START, "player_turn")
+    workflow.add_edge(START, "player_turn")  # 游戏从玩家回合开始
     
     # 从player_turn可以:
     # 1. 继续留在player_turn (hit)
@@ -201,9 +302,16 @@ def build_graph(checkpointer=None) -> StateGraph:
     return workflow.compile(checkpointer=checkpointer)
 
 def show_game_state():
-    """显示游戏流程图"""
+    """Show game flow graph.
+    
+    Uses Graphviz to visualize current game state and flow:
+    1. Display basic game flow graph structure
+    2. Highlight current node based on state
+    3. Show result when game is over
+    """
     st.markdown("### Game Flow")
     
+    # 基本图结构定义
     dot_graph = """
     digraph G {
         rankdir=LR;
@@ -225,7 +333,7 @@ def show_game_state():
     game_over = st.session_state.game_state["game_over"]
     
     if game_over:
-        # 游戏结束时,显示结果
+        # 游戏结束时 显示结果
         player_score = st.session_state.game_state["player_score"]
         dealer_score = st.session_state.game_state["dealer_score"]
         
@@ -289,9 +397,6 @@ def main():
                 # 使用graph.invoke初始化游戏状态
                 config = {"configurable": {"thread_id": st.session_state.thread_id}}
                 st.session_state.game_state = st.session_state.graph.invoke(initial_state, config=config)
-                print(" st.session_state.game_state = !!")
-                print( st.session_state.game_state )
-                print( "checking = !!", st.session_state.game_state["checking"])
                 st.rerun()
     
     else:
@@ -312,20 +417,20 @@ def main():
         
         # 显示游戏信息
         if st.session_state.game_state["game_over"]:
-            # 游戏结束时,显示结果
+            # 游戏结束时, 显示结果
             player_score = st.session_state.game_state["player_score"]
             dealer_score = st.session_state.game_state["dealer_score"]
             
             if player_score > 21:
-                render_game_message("游戏结束 - 你爆牌了! 庄家获胜!", "error")
+                render_game_message("Game Over - You busted! Dealer wins!", "error")
             elif dealer_score > 21:
-                render_game_message("游戏结束 - 庄家爆牌! 你赢了!", "success")
+                render_game_message("Game Over - Dealer busted! You win!", "success")
             elif player_score > dealer_score:
-                render_game_message(f"游戏结束 - 你赢了! (你的点数: {player_score}, 庄家点数: {dealer_score})", "success")
+                render_game_message(f"Game Over - You win! (Your score: {player_score}, Dealer's score: {dealer_score})", "success")
             elif dealer_score > player_score:
-                render_game_message(f"游戏结束 - 庄家获胜! (庄家点数: {dealer_score}, 你的点数: {player_score})", "error")
+                render_game_message(f"Game Over - Dealer wins! (Dealer's score: {dealer_score}, Your score: {player_score})", "error")
             else:
-                render_game_message(f"游戏结束 - 平局! (双方点数: {player_score})", "warning")
+                render_game_message(f"Game Over - It's a tie! (Both scores: {player_score})", "warning")
         else:
             render_game_message(st.session_state.game_state["message"], "info")
         
@@ -366,7 +471,7 @@ def main():
                 render_cards(st.session_state.game_state['dealer_cards'])
                 st.write(f"Score: {st.session_state.game_state['dealer_score']}")
             else:
-                # 只显示第一张牌,其他牌显示背面
+                # 只显示第一张牌, 其他牌显示背面
                 render_cards(st.session_state.game_state['dealer_cards'], hidden=True)
                 st.write("Score: ?")
         
