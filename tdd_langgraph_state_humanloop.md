@@ -49,26 +49,12 @@ class State(TypedDict):
 
 ### 2.1 节点定义
 ```python
-def player_turn(state: State) -> State:
-    """Human-in-loop节点实现"""
-    if state["game_over"]:
-        return state
-        
-    game_info = {
-        "messages": state["messages"],
-        "valid_actions": ["hit", "stand"]
-    }
-    
-    action = interrupt(game_info)
-    
-    if isinstance(action, Command):
-        resume_action = action.resume
-        if resume_action == "hit":
-            state["messages"].append({"role": "user", "content": "hit"})
-        elif resume_action == "stand":
-            state["messages"].append({"role": "user", "content": "stand"})
-            state["current_turn"] = "dealer"
-    
+def state_node(state: State) -> State:
+
+    # 处理用户操作
+    state["messages"] = ....
+
+    # 必须返回state
     return state
 ```
 
@@ -143,7 +129,7 @@ result = graph.invoke(initial_state, config=config)
 1. interrupt()必须启用checkpointer才能使用
 2. 使用thread_id标识不同的执行流
 3. 可以选择不同的存储后端(如MemorySaver或LocalStateCheckpointer)
-4. 建议在生产环境使用持久化存储
+4. 不能在interrupt()外围通过try catch捕获异常
 
 ### 3.3 Human-in-loop节点实现
 ```python
@@ -179,7 +165,7 @@ def player_turn(state: GameState) -> GameState:
         # 使用interrupt等待玩家操作
         action = interrupt(game_info)
         
-        # 处理玩家操作
+        # 通过返回的action处理玩家操作
         if action == "hit":
             # 抽一张牌
             new_card = state["deck"].pop()
@@ -205,17 +191,15 @@ def player_turn(state: GameState) -> GameState:
 ```python
 def handle_player_action(action: str):
     """处理玩家操作并同步状态"""
-    try:
-        # 创建Command并调用图
-        command = Command(resume=action)
-        config = {"configurable": {"thread_id": st.session_state.thread_id}}
-        result = st.session_state.graph.invoke(command, config=config)
-        
-        # 同步状态
-        st.session_state.game_state = result
-        st.session_state.require_update = True
-    except Exception as e:
-        st.error(f"Action processing error: {str(e)}")
+
+    # 创建Command并调用图
+    command = Command(resume="hit") # 恢复到中断点, 会从整体中断函数开始执行, 返回resume值
+    config = {"configurable": {"thread_id": st.session_state.thread_id}}
+    result = st.session_state.graph.invoke(command, config=config)
+    
+    # 同步状态
+    st.session_state.game_state = result
+    st.session_state.require_update = True
 ```
 
 ### 3.5 最佳实践
@@ -223,6 +207,8 @@ def handle_player_action(action: str):
 - 只传必要的游戏信息
 - 明确定义有效操作
 - 使用thread_id标识执行流
+- 不能在interrupt()外围通过try catch捕获异常, 不需要传入给interrupt("please input something...") 特别的参数
+- 通过中断函数重新呼叫, 通过 graph.invoke(Command(resume=<next_state>), config=config) 来恢复
 
 2. 状态同步:
 - interrupt()返回后立即更新状态

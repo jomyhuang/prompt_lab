@@ -47,6 +47,7 @@ class GameState(TypedDict):
     player_info: Optional[dict]  # 玩家信息字典
     dealer_info: Optional[dict]  # 庄家信息字典
     checking: str  # 检查状态标记
+    game_info: Optional[dict]  # 游戏信息字典
 
 def calculate_hand(cards: List[str]) -> int:
     """Calculate hand value.
@@ -114,61 +115,38 @@ def init_game() -> GameState:
         last_action=None,
         player_wins=0,
         dealer_wins=0,
-        checking="checking_init"
+        checking="checking_init",
+        game_info=None
     )
 
 def player_turn(state: GameState) -> GameState:
-    """Handle player's turn with Human-in-loop implementation.
-    
-    This is a key Human-in-loop node that uses langgraph's interrupt mechanism
-    for human-computer interaction. When it's player's turn, the game flow
-    pauses here waiting for player input.
-    
-    Workflow:
-    1. Check if it's player's turn and game is not over
-    2. Prepare game state info to show player (cards, scores, etc)
-    3. Use interrupt to pause execution, wait for player action (hit/stand)
-    4. Update game state based on player's action
-    5. Return updated state to continue game flow
-    
-    Human-in-loop implementation points:
-    - Use interrupt() function to pause execution
-    - Package game state as dictionary to pass to frontend
-    - Wait for player selection in UI
-    - Resume with Command(resume=action)
-    
-    Args:
-        state: Current game state
-        
-    Returns:
-        Updated game state
-    """
+    """玩家回合处理"""
+    print(f"[player_turn] 进入玩家回合节点")
     # 只在玩家回合且游戏未结束时等待操作
     if state["current_turn"] == "player" and not state["game_over"]:
         # 准备展示给玩家的游戏状态信息
-        # game_info = {
-        #     "message": "Your turn! Hit or Stand?",
-        #     "player_info": {
-        #         "cards": state["player_cards"],
-        #         "score": state["player_score"]
-        #     },
-        #     "dealer_info": {
-        #         "visible_card": state["dealer_cards"][0],  # 只显示第一张牌
-        #         "hidden_cards": len(state["dealer_cards"]) - 1,  # 其余牌数
-        #         "visible_score": calculate_hand([state["dealer_cards"][0]])  # 只计算可见牌的分数
-        #     },
-        #     "game_stats": {
-        #         "player_wins": state["player_wins"],
-        #         "dealer_wins": state["dealer_wins"]
-        #     }
-        # }
+        game_info = {
+            "message": "Your turn! Hit or Stand?",
+            "player_info": {
+                "cards": state["player_cards"],
+                "score": state["player_score"]
+            },
+            "dealer_info": {
+                "visible_card": state["dealer_cards"][0],  # 只显示第一张牌
+                "hidden_cards": len(state["dealer_cards"]) - 1,  # 其余牌数
+                "visible_score": calculate_hand([state["dealer_cards"][0]])  # 只计算可见牌的分数
+            },
+            "game_stats": {
+                "player_wins": state["player_wins"],
+                "dealer_wins": state["dealer_wins"]
+            }
+        }
         
         # 使用interrupt等待玩家操作
-        # 此处会暂停执行 直到收到玩家的操作指令
-        # action = interrupt(game_info)
-        # 检查: 目前传入值为exceptiong 捕获的value值, 用途状况不明
-        action = interrupt("interrupt from player_turn ----")
-        
+        print(f"[player_turn] Before interrupt ----")
+        action = interrupt(value=game_info)
+        print(f"[player_turn] After interrupt ---- Action: {action}")
+
         # 处理玩家操作
         if action == "hit":
             # 抽一张牌
@@ -191,18 +169,8 @@ def player_turn(state: GameState) -> GameState:
     return state
 
 def dealer_turn(state: GameState) -> GameState:
-    """Handle dealer's turn.
-    
-    Dealer follows a fixed strategy:
-    - Continue drawing cards until score is 17 or higher
-    - Then stop and determine the winner
-    
-    Args:
-        state: Current game state
-        
-    Returns:
-        Updated game state
-    """
+    """庄家回合处理"""
+    print(f"[dealer_turn] 进入庄家回合节点")
     if state["current_turn"] == "dealer" and not state["game_over"]:
         # 庄家继续抽牌直到17点或以上
         while state["dealer_score"] < 17:
@@ -393,13 +361,13 @@ def main():
             if st.button("Start Game", use_container_width=True):
                 st.session_state.game_started = True
                 initial_state = init_game()
-                # 创建带checkpointer的graph
                 checkpointer = MemorySaver()
                 st.session_state.graph = build_graph(checkpointer=checkpointer)
                 # 使用graph.invoke初始化游戏状态
+                print(f"[main] Before initial invoke ----")
                 config = {"configurable": {"thread_id": st.session_state.thread_id}}
                 st.session_state.game_state = st.session_state.graph.invoke(initial_state, config=config)
-
+                print(f"[main] After initial invoke ----")
                 st.rerun()
     
     else:
@@ -411,8 +379,10 @@ def main():
             checkpointer = MemorySaver()
             st.session_state.graph = build_graph(checkpointer=checkpointer)
             # 使用graph.invoke初始化游戏状态
+            print(f"[main] Before initial invoke ----")
             config = {"configurable": {"thread_id": st.session_state.thread_id}}
             st.session_state.game_state = st.session_state.graph.invoke(initial_state, config=config)
+            print(f"[main] After initial invoke ----", st.session_state.game_state)
             
         # 显示分数
         render_game_stats(st.session_state.game_state["player_wins"], 
@@ -453,17 +423,21 @@ def main():
                 if action == "hit":
                     with st.spinner("Dealing card..."):
                         time.sleep(0.5)
+                        print(f"[main] Before hit invoke ----")
                         config = {"configurable": {"thread_id": st.session_state.thread_id}}
                         st.session_state.game_state = st.session_state.graph.invoke(
-                            Command(resume="hit"), config=config)
+                            Command(resume="hit", update={"checking": "hit_completed"}), config=config)
+                        print(f"[main] After hit invoke ----", st.session_state.game_state)
                     st.rerun()
                 
                 elif action == "stand":
                     with st.spinner("Dealer's turn..."):
                         time.sleep(0.5)
+                        print(f"[main] Before stand invoke ----")
                         config = {"configurable": {"thread_id": st.session_state.thread_id}}
                         st.session_state.game_state = st.session_state.graph.invoke(
                             Command(resume="stand"), config=config)
+                        print(f"[main] After stand invoke ----")
                     st.rerun()
         
         with col2:
@@ -481,12 +455,12 @@ def main():
 
             if st.button("New Game", key="restart", use_container_width=True):
                 initial_state = init_game()
-                # 保持胜场记录
                 initial_state["player_wins"] = st.session_state.game_state["player_wins"]
                 initial_state["dealer_wins"] = st.session_state.game_state["dealer_wins"]
-                # 使用graph.invoke重新开始游戏
+                print(f"[main] Before new game invoke ----")
                 config = {"configurable": {"thread_id": st.session_state.thread_id}}
                 st.session_state.game_state = st.session_state.graph.invoke(initial_state, config=config)
+                print(f"[main] After new game invoke ----")
                 st.rerun()
             
             with st.expander("Game State", expanded=False):
