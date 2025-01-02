@@ -1,15 +1,15 @@
 from typing import TypedDict, Annotated, List, Literal, Optional
 from dataclasses import dataclass
 from datetime import datetime
-import logging
+# import logging
 import uuid
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+# # 配置日志
+# logging.basicConfig(
+#     level=logging.INFO,
+#     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+# )
+# logger = logging.getLogger(__name__)
 
 class GameState(TypedDict):
     """游戏状态类型定义
@@ -51,7 +51,7 @@ class GameStateManager:
     - 动作历史记录
     """
     def __init__(self):
-        self.logger = logging.getLogger(__name__)
+        # self.logger = logging.getLogger(__name__)
         self.game_state = self.init_game_state()
     
     def validate_state(self, state: GameState) -> bool:
@@ -66,22 +66,22 @@ class GameStateManager:
             self.logger.error(f"State validation failed: {str(e)}")
             raise
 
-    def update_state(self, state: GameState, action: GameAction) -> GameState:
-        """更新游戏状态"""
-        try:
-            new_state = state.copy()
-            new_state["last_action"] = action.action_type
-            new_state["action_history"].append({
-                "type": action.action_type,
-                "player": action.player_id,
-                "time": action.timestamp.isoformat(),
-                "data": action.data
-            })
-            self.game_state = new_state
-            return new_state
-        except Exception as e:
-            self.logger.error(f"State update failed: {str(e)}")
-            raise
+    # def update_state(self, state: GameState, action: GameAction) -> GameState:
+    #     """更新游戏状态"""
+    #     try:
+    #         new_state = state.copy()
+    #         new_state["last_action"] = action.action_type
+    #         new_state["action_history"].append({
+    #             "type": action.action_type,
+    #             "player": action.player_id,
+    #             "time": action.timestamp.isoformat(),
+    #             "data": action.data
+    #         })
+    #         self.game_state = new_state
+    #         return new_state
+    #     except Exception as e:
+    #         self.logger.error(f"State update failed: {str(e)}")
+    #         raise
 
     def init_game_state(self) -> GameState:
         """初始化游戏状态"""
@@ -102,22 +102,22 @@ class GameStateManager:
         """获取当前可用的动作列表"""
         return state["valid_actions"]
 
-    def add_message(self, state: GameState, role: str, content: str) -> GameState:
-        """添加消息到历史记录"""
-        new_state = state.copy()
-        new_state["messages"].append({
-            "role": role,
-            "content": content,
-            "timestamp": datetime.now().isoformat()
-        })
-        self.game_state = new_state
-        return new_state
+    # def add_message(self, state: GameState, role: str, content: str) -> GameState:
+    #     """添加消息到历史记录"""
+    #     new_state = state.copy()
+    #     new_state["messages"].append({
+    #         "role": role,
+    #         "content": content,
+    #         "timestamp": datetime.now().isoformat()
+    #     })
+    #     self.game_state = new_state
+    #     return new_state
 
     def get_game_state(self) -> GameState:
         """获取当前游戏状态"""
         return self.game_state
 
-    def set_game_state(self, state: GameState):
-        """设置当前游戏状态"""
-        if self.validate_state(state):
-            self.game_state = state 
+    # def set_game_state(self, state: GameState):
+    #     """设置当前游戏状态"""
+    #     if self.validate_state(state):
+    #         self.game_state = state 

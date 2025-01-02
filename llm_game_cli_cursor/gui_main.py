@@ -8,6 +8,8 @@ from game_state import GameStateManager, GameAction
 from game_workflow import GameWorkflow
 from llm_interaction import LLMInteraction
 from langgraph.checkpoint.memory import MemorySaver
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+
 
 def init_session_state():
     """初始化会话状态
@@ -35,6 +37,7 @@ def init_session_state():
         st.session_state.require_update = False
         st.session_state.processing_state = False
 
+        add_system_message("欢迎来到游戏!")
         print(f"[init_session_state] Initialized ----")
 
 def render_sidebar_controls():
@@ -141,8 +144,9 @@ def render_chat_view():
     chat_container = st.container(height=500)
     with chat_container:
         for message in st.session_state.messages:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
+            # message 采用langchain规范对话类型: SystemMessage, HumanMessage, AIMessage
+            with st.chat_message(message.type):
+                st.markdown(message.content)
     
     # 渲染对话输入框
     user_input = st.chat_input("输入你的行动或问题...", key="chat_input")
@@ -175,14 +179,20 @@ def render_action_view():
             if st.button("给出建议", key="get_advice", use_container_width=True):
                 add_user_chat_input("分析当前局势，给出建议")
 
+
+def add_system_message(message: str):
+    """添加系统消息"""
+    st.session_state.messages.append(SystemMessage(content=message))
+    st.session_state.require_update = True
+
 def add_user_message(message: str):
     """添加用户消息"""
-    st.session_state.messages.append({"role": "user", "content": message})
+    st.session_state.messages.append(HumanMessage(content=message))
     st.session_state.require_update = True
 
 def add_assistant_message(message: str):
     """添加助手消息"""
-    st.session_state.messages.append({"role": "assistant", "content": message})
+    st.session_state.messages.append(AIMessage(content=message))
     st.session_state.require_update = True
 
 def add_user_chat_input(message: str):
