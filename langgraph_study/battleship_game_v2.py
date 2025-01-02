@@ -10,17 +10,6 @@ import tempfile
 from PIL import Image
 import graphviz
 
-def add_messages(messages: list) -> list:
-    """添加消息到历史记录
-    
-    Args:
-        messages: 消息列表
-        
-    Returns:
-        更新后的消息列表
-    """
-    return messages
-
 # 定义船只类型和大小
 SHIPS = {
     "航空母舰": 5,
@@ -152,7 +141,7 @@ def init_game() -> GameState:
     # 初始化消息历史
     messages = [
         {"role": "system", "content": "游戏开始！"},
-        {"role": "system", "content": "请选择一个位置进行攻击。"}
+        # {"role": "system", "content": "请选择一个位置进行攻击。"}
     ]
     
     return GameState(
@@ -247,181 +236,6 @@ def check_game_winner(state: GameState) -> Optional[str]:
         return "computer"
     return None
 
-def check_winner(state: GameState) -> GameState:
-    """检查获胜者的节点
-    
-    Args:
-        state: 游戏状态
-        
-    Returns:
-        更新后的游戏状态
-    """
-    print("进入节点: check_winner")
-    winner = check_game_winner(state)
-    if winner:
-        state["game_over"] = True
-        state["winner"] = winner
-        state["phase"] = "game_over"
-        win_message = "游戏结束！玩家获胜！" if winner == "player" else "游戏结束！电脑获胜！"
-        state["messages"].append({
-            "role": "system",
-            "content": win_message
-        })
-        state["message"] = win_message
-    else:
-        # 切换回合
-        state["current_turn"] = "computer" if state["current_turn"] == "player" else "player"
-    
-    return state
-
-# 玩家回合
-def player_turn(state: GameState) -> GameState:
-    """玩家回合处理
-    
-    使用interrupt机制等待玩家操作
-    """
-    if state["current_turn"] != "player" or state["game_over"]:
-        return state
-    
-    # 准备展示给玩家的游戏状态信息
-    game_info = {
-        "message": state["message"],
-        "player_info": {
-            "board": state["player_board"],
-            "shots": state["player_shots"],
-            "ships": state["player_ships"],
-            "hits": state["player_info"]["hits"],
-            "misses": state["player_info"]["misses"],
-            "ships_sunk": state["player_info"]["ships_sunk"]
-        },
-        "computer_info": {
-            "board": state["computer_board"],
-            "shots": state["computer_shots"],
-            "visible_ships": [],  # 不显示电脑的船只位置
-            "hits": state["computer_info"]["hits"],
-            "misses": state["computer_info"]["misses"],
-            "ships_sunk": state["computer_info"]["ships_sunk"]
-        },
-        "valid_actions": state["valid_actions"],
-        "phase": state["phase"]
-    }
-    
-    # 使用interrupt等待玩家操作
-    action = interrupt(game_info)
-    
-    # 处理玩家操作
-    if isinstance(action, dict):  # 检查是否为字典类型
-        print(f"收到玩家操作: {action}")  # 打印收到的action
-        if action.get("action") == "attack":
-            row = action.get("row")
-            col = action.get("col")
-            if row is not None and col is not None:
-                # 检查是否有效的攻击位置
-                if state["player_shots"][row][col] == " ":
-                    # 更新状态
-                    state = make_shot(state, row, col, True)
-                    state["last_action"] = action  # 直接存储字典
-                    state["messages"].append({
-                        "role": "player",
-                        "content": f"玩家攻击位置: ({row}, {col})"
-                    })
-                    
-                    # 检查是否获胜
-                    winner = check_game_winner(state)
-                    if winner:
-                        state["game_over"] = True
-                        state["winner"] = winner
-                        state["phase"] = "game_over"
-                        state["message"] = "游戏结束！玩家获胜！"
-                        state["messages"].append({
-                            "role": "system",
-                            "content": state["message"]
-                        })
-                    else:
-                        state["current_turn"] = "computer"
-                        state["message"] = "轮到电脑回合"
-                        state["messages"].append({
-                            "role": "system",
-                            "content": state["message"]
-                        })
-                else:
-                    state["message"] = "无效的攻击位置，请重新选择！"
-                    state["messages"].append({
-                        "role": "system",
-                        "content": state["message"]
-                    })
-            else:
-                print(f"无效的行列值: row={row}, col={col}")  # 打印行列值错误
-        else:
-            # 如果action格式不正确
-            print(f"无效的action类型: {action.get('action')}")  # 打印action类型错误
-            state["message"] = "无效的操作指令"
-            state["messages"].append({
-                "role": "system",
-                "content": state["message"]
-            })
-    else:
-        # 如果没有收到有效的action
-        print(f"收到非字典类型的action: {type(action)}")  # 打印类型错误
-        state["message"] = "请选择一个位置进行攻击"
-        state["messages"].append({
-            "role": "system",
-            "content": state["message"]
-        })
-    
-    return state
-
-# 电脑回合
-def computer_turn(state: GameState) -> GameState:
-    """电脑回合处理
-    
-    实现简单的AI策略
-    """
-    if state["current_turn"] != "computer" or state["game_over"]:
-        return state
-    
-    try:
-        # 简单的AI：随机选择一个未射击过的位置
-        valid_positions = [
-            (i, j) 
-            for i in range(BOARD_SIZE) 
-            for j in range(BOARD_SIZE) 
-            if state["computer_shots"][i][j] == " "
-        ]
-        
-        if valid_positions:
-            row, col = random.choice(valid_positions)
-            state = make_shot(state, row, col, False)
-            state["last_action"] = f"attack_{row}_{col}"
-            
-            # 检查是否获胜
-            winner = check_winner(state)
-            if winner:
-                state["game_over"] = True
-                state["winner"] = winner
-                state["phase"] = "game_over"
-                state["message"] += " 游戏结束！电脑获胜！"
-            else:
-                state["current_turn"] = "player"
-                state["phase"] = "playing"
-                state["checking"] = "route"  # 标记需要路由
-        else:
-            state["message"] = "没有可用的攻击位置！"
-            state["game_over"] = True
-            state["phase"] = "game_over"
-            state["checking"] = "route"  # 标记需要路由
-    except Exception as e:
-        state["messages"].append({
-            "role": "error",
-            "content": f"电脑回合错误: {str(e)}"
-        })
-        state["current_turn"] = "player"
-    
-    # 添加延迟，使游戏更自然
-    time.sleep(1)
-    
-    return state
-
 # 构建游戏流程图
 def build_graph(checkpointer=None) -> StateGraph:
     """构建游戏流程图"""
@@ -449,7 +263,7 @@ def build_graph(checkpointer=None) -> StateGraph:
     )
     
     # 从player_action直接到computer_action
-    workflow.add_edge("player_action", "computer_action")
+    workflow.add_edge("player_action", "route")
     
     # 从computer_action回到route
     workflow.add_edge("computer_action", "route")
@@ -485,8 +299,10 @@ def route_state(state: GameState) -> GameState:
     """
     print("进入节点: route_state")
     print(f"[route_state] Before interrupt ----")
+    # 特别插入中断进入streamlit 刷新
     action = interrupt("interrput from route_state")
     print(f"[route_state] After interrupt ----")
+
     # 更新可用动作
     if state["current_turn"] == "player":
         state["valid_actions"] = ["attack"]
@@ -495,30 +311,13 @@ def route_state(state: GameState) -> GameState:
         state["valid_actions"] = []
         state["message"] = "电脑回合..."
     
-    # 添加消息
-    state["messages"].append({
-        "role": "system",
-        "content": state["message"]
-    })
+    # # 添加消息
+    # state["messages"].append({
+    #     "role": "system",
+    #     "content": state["message"]
+    # })
     
     return state
-
-# def router(state: GameState) -> str:
-#     """路由函数，决定下一个节点
-    
-#     Args:
-#         state: 游戏状态
-        
-#     Returns:
-#         下一个节点的名称
-#     """
-#     print("进入节点: router")
-#     if state["game_over"]:
-#         return "handle_end"
-#     elif state["current_turn"] == "player":
-#         return "player_action"
-#     else:
-#         return "computer_action"
 
 def player_action(state: GameState) -> GameState:
     """合并后的玩家动作节点，包含攻击处理和胜负检查"""
@@ -527,9 +326,9 @@ def player_action(state: GameState) -> GameState:
         return state
     
     # 使用interrupt等待玩家操作
-    print("before player_action interrupt")
+    print("[player_action] before player_action interrupt")
     action = interrupt("waiting for player action...")
-    print("after player_action interrupt", action)
+    print("[player_action] after player_action interrupt", action)
     
     # 处理玩家操作
     if isinstance(action, dict):
@@ -574,7 +373,7 @@ def player_action(state: GameState) -> GameState:
                     })
             else:
                 print(f"无效的行列值: row={row}, col={col}")
-                st.stop()
+                # st.stop()
         else:
             print(f"无效的action类型: {action.get('action')}")
             state["message"] = "无效的操作指令"
@@ -582,44 +381,16 @@ def player_action(state: GameState) -> GameState:
                 "role": "system",
                 "content": state["message"]
             })
-            st.stop()
+            # st.stop()
     else:
         print(f"收到非字典类型的action: {type(action)}")
-        state["message"] = "请选择一个位置进行攻击"
-        state["messages"].append({
-            "role": "system",
-            "content": state["message"]
-        })
-        st.stop()
+        # state["message"] = "请选择一个位置进行攻击"
+        # state["messages"].append({
+        #     "role": "system",
+        #     "content": state["message"]
+        # })
+        # # st.stop()
 
-    return state
-
-def process_attack(state: GameState) -> GameState:
-    """处理攻击动作的节点
-    
-    Args:
-        state: 游戏状态
-        
-    Returns:
-        更新后的游戏状态
-    """
-    print("进入节点: process_attack")
-    if not state["last_action"]:
-        return state
-    
-    action = state["last_action"]
-    if isinstance(action, dict) and action.get("action") == "attack":
-        row = action.get("row")
-        col = action.get("col")
-        if row is not None and col is not None:
-            # 检查是否有效的攻击位置
-            if state["player_shots"][row][col] == " ":
-                state = make_shot(state, row, col, True)
-                state["messages"].append({
-                    "role": "system",
-                    "content": state["message"]
-                })
-    
     return state
 
 def computer_action(state: GameState) -> GameState:
@@ -879,21 +650,20 @@ def main():
         
         # 创建配置
         config = {"configurable": {"thread_id": st.session_state.thread_id}}
-        
+
         # 调用图的 invoke 方法执行游戏流程
+        # resume="XXX" 传入是interruptd的return值, 通常为Command(),会继续往下一个state
+        # TODO: 如果需要resume才resume
         print(f"[main] Before invoke ----")
         st.session_state.game_state = st.session_state.graph.invoke(
-            Command(resume="route"), 
+            Command(resume=None), 
             config=config)
         print(f"[main] After invoke ----")
-        
-        # 更新游戏状态
-        # if isinstance(result, dict):
-        #     st.session_state.game_state.update(result)
             
     # 检查是否需要重新渲染
     if st.session_state.need_rerun:
         st.session_state.need_rerun = False
+        print(f"[main] need_rerun ----", time.time())
         st.rerun()
 
 def render_game_interface():
@@ -927,7 +697,7 @@ def render_game_interface():
         render_game_flow(st.session_state.game_state["current_turn"])
         
         # 显示当前状态信息
-        with st.expander("游戏状态详情", expanded=False):
+        with st.expander("游戏状态详情", expanded=True):
             render_game_state(st.session_state.game_state)
     
     # 在中间列显示电脑的棋盘

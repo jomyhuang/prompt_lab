@@ -2,24 +2,29 @@ import streamlit as st
 from typing import TypedDict, Annotated
 from langgraph.graph import StateGraph, START, END
 import random
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
 # 定义游戏状态
 class GameState(TypedDict):
-    player_choice: str
-    computer_choice: str
-    history: list[str]
-    player_wins: int
-    computer_wins: int
-    game_over: bool
+    messages: Annotated[list[dict], "游戏消息历史"]
+    player_choice: Annotated[str, "玩家选择"]
+    computer_choice: Annotated[str, "电脑选择"]
+    player_wins: Annotated[int, "玩家获胜次数"]
+    computer_wins: Annotated[int, "电脑获胜次数"]
+    game_over: Annotated[bool, "游戏是否结束"]
 
 # 初始化游戏状态
 def init_game() -> GameState:
     if 'game_state' in st.session_state:
         del st.session_state.game_state
+    
     return GameState(
+        messages=[{
+            "role": "system",
+            "content": "这是一个石头剪刀布游戏，采用三战两胜制。"
+        }],
         player_choice="",
         computer_choice="",
-        history=[],
         player_wins=0,
         computer_wins=0,
         game_over=False
@@ -37,6 +42,13 @@ def computer_move(state: GameState) -> GameState:
         state["computer_choice"] = random.choice(choices)
     return state
 
+def add_message(state: GameState, role: str, content: str) -> None:
+    """标准化添加消息"""
+    state["messages"].append({
+        "role": role,
+        "content": content
+    })
+
 # 判断游戏结果
 def judge_game(state: GameState) -> GameState:
     if state["game_over"]:
@@ -44,6 +56,10 @@ def judge_game(state: GameState) -> GameState:
         
     player = state["player_choice"]
     computer = state["computer_choice"]
+    
+    # 记录玩家和电脑的选择
+    add_message(state, "user", f"我选择了 {player}")
+    add_message(state, "assistant", f"我选择了 {computer}")
     
     rules = {
         "石头": {"石头": "平局", "剪刀": "你赢了!", "布": "电脑赢了!"},
@@ -68,7 +84,11 @@ def judge_game(state: GameState) -> GameState:
         result += " 电脑获得最终胜利！"
         
     round_num = state["player_wins"] + state["computer_wins"]
-    state["history"].append(f"第{round_num}回合：你出了{player}, 电脑出了{computer}. {result}")
+    add_message(state, "system", f"第{round_num}回合：你出了{player}, 电脑出了{computer}. {result}")
+    
+    if state["game_over"]:
+        add_message(state, "system", "游戏结束！")
+    
     return state
 
 # 构建游戏流程图
@@ -119,10 +139,14 @@ def main():
     else:
         st.info("游戏已结束！")
     
-    # 显示游戏历史
+    # 使用container和chat_message显示对话记录
     st.subheader("对战记录")
-    for record in st.session_state.game_state["history"]:
-        st.write(record)
+    # 创建固定高度的容器
+    chat_container = st.container(height=400)
+    with chat_container:
+        for msg in st.session_state.game_state["messages"]:
+            with st.chat_message(msg["role"]):
+                st.write(msg["content"])
     
     # 重置游戏按钮
     if st.button("重新开始新的比赛", key="restart"):

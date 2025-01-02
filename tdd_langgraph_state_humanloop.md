@@ -2,10 +2,16 @@
 
 ## 0. 参考文档
 
+### LangGraph 基本设计模式:
+https://langchain-ai.github.io/langgraph/tutorials/introduction/#setup
+https://langchain-ai.github.io/langgraph/tutorials/introduction/#part-4-human-in-the-loop
+
 ### LangGraph API
 - LangGraph官方文档: https://python.langchain.com/docs/langgraph
 - StateGraph API: https://python.langchain.com/api/langgraph/graph
-- Human-in-loop API: https://python.langchain.com/api/langgraph/types
+- Human-in-loop 设计模式: 
+https://langchain-ai.github.io/langgraph/concepts/human_in_the_loop/
+https://langchain-ai.github.io/langgraph/concepts/human_in_the_loop/#design-patterns
 
 ### Streamlit API
 - Streamlit官方文档: https://docs.streamlit.io
@@ -38,7 +44,7 @@ class State(TypedDict):
 - 暂停图执行
 - 传递状态信息到前端
 - 等待用户输入
-- 通过Command恢复
+- 通过graph.invoke(Command(resume=“action str” 或是 {“action”: “attack”, “row”: 1, “col”: 2})) 恢复, 传入的是interrupt的return值.
 
 3. 状态更新:
 - 追加而不是覆盖消息
@@ -73,7 +79,8 @@ graph.add_edge("player_turn", "dealer_turn")
 graph.add_edge("dealer_turn", END)
 
 # 编译图
-graph = graph.compile()
+# 当使用interrupt()时, 需要启用checkpointer
+graph = graph.compile(checkpointer=checkpointer)
 ```
 
 ### 2.3 条件流转
@@ -92,6 +99,16 @@ graph.add_edge(START, "route")
 graph.add_edge("route", "player_turn")
 graph.add_edge("route", "dealer_turn")
 graph.add_edge("route", END)
+
+# 添加条件流转
+graph.add_conditional_edges(
+    "route",
+    lambda x: (
+        "handle_end" if x["game_over"] else
+        "player_action" if x["current_turn"] == "player" else
+        "computer_action"
+    )
+)
 ```
 
 ## 3. Human-in-loop实现
@@ -117,7 +134,7 @@ checkpointer = MemorySaver()
 thread_id = str(random.randint(1, 1000000))
 config = {"configurable": {"thread_id": thread_id}}
 
-# 3. 创建图时启用checkpointer
+# 3. 创建图时启用checkpointer (必须!!)
 graph = build_graph(checkpointer=checkpointer)
 
 # 4. 使用config调用图
@@ -143,47 +160,23 @@ def player_turn(state: GameState) -> GameState:
     4. 处理用户操作
     5. 更新游戏状态
     """
-    if state["current_turn"] == "player" and not state["game_over"]:
-        # 准备展示给玩家的游戏状态信息
-        game_info = {
-            "message": "Your turn! Hit or Stand?",
-            "player_info": {
-                "cards": state["player_cards"],
-                "score": state["player_score"]
-            },
-            "dealer_info": {
-                "visible_card": state["dealer_cards"][0],
-                "hidden_cards": len(state["dealer_cards"]) - 1,
-                "visible_score": calculate_hand([state["dealer_cards"][0]])
-            },
-            "game_stats": {
-                "player_wins": state["player_wins"],
-                "dealer_wins": state["dealer_wins"]
-            }
-        }
-        
-        # 使用interrupt等待玩家操作
-        action = interrupt(game_info)
-        
-        # 通过返回的action处理玩家操作
-        if action == "hit":
-            # 抽一张牌
-            new_card = state["deck"].pop()
-            state["player_cards"].append(new_card)
-            state["player_score"] = calculate_hand(state["player_cards"])
-            
-            # 检查是否爆牌
-            if state["player_score"] > 21:
-                state["message"] = f"Bust! You drew {new_card} and went over 21!"
-                state["game_over"] = True
-                state["dealer_wins"] += 1
-            else:
-                state["message"] = f"You drew {new_card}. Hit or Stand?"
+    gameinfo = {
+        ...
+    }
+
+    # 在interrup前, 代码在resume时候, 会重复执行, 不能有更新state的操作
+    # 使用interrupt等待玩家操作
+    print("[player_turn] before interrupt")
+    action = interrupt(game_info)
+    print("[player_turn] after interrupt", action)
+   
+    # 通过返回的action 处理玩家操作, 文本或是Command()
+    if action == "hit":
+        ...
                 
-        elif action == "stand":
-            state["current_turn"] = "dealer"
-            state["message"] = f"You stand with {state['player_score']}. Dealer's turn..."
-    
+    elif action == "stand":
+        ...
+
     return state
 ```
 
@@ -192,11 +185,17 @@ def player_turn(state: GameState) -> GameState:
 def handle_player_action(action: str):
     """处理玩家操作并同步状态"""
 
-    # 创建Command并调用图
-    command = Command(resume="hit") # 恢复到中断点, 会从整体中断函数开始执行, 返回resume值
     config = {"configurable": {"thread_id": st.session_state.thread_id}}
+
+    # 创建Command并调用图, 并且可以更新状态
+    command = Command(resume="hit", update={"messages": [feedback_msg]}) 
+
+    # 恢复到中断点继续图状态流动, 会从整体中断函数开始执行, 返回resume值
     result = st.session_state.graph.invoke(command, config=config)
     
+    # 或是跳转到特定节点
+    result = st.session_state.graph.invoke(Command(goto="run_tool", update={"messages": [feedback_msg]}), config=config)
+
     # 同步状态
     st.session_state.game_state = result
     st.session_state.require_update = True
@@ -207,31 +206,37 @@ def handle_player_action(action: str):
 - 只传必要的游戏信息
 - 明确定义有效操作
 - 使用thread_id标识执行流
-- 不能在interrupt()外围通过try catch捕获异常, 不需要传入给interrupt("please input something...") 特别的参数
-- 通过中断函数重新呼叫, 通过 graph.invoke(Command(resume=<next_state>), config=config) 来恢复
+- 不能在interrupt()外围通过try catch捕获异常, 不一定需要传入给interrupt("please input something...") 特别的参数
+- 通过中断函数重新呼叫, 通过 graph.invoke(Command(resume=str或dict), config=config) 来恢复继续图流动
 
 2. 状态同步:
 - interrupt()返回后立即更新状态
 - Command恢复前验证状态
 - 保持session_state同步
 
-3. 错误处理:
-- 捕获并处理异常
-- 提供友好错误信息
-- 保持状态一致性
+3. 代码规范:
+- 以LangGarph 规范使用 messages: Annotated[list[dict], "游戏消息"] 保存对话信息
+    - 以 AIMessage, HumanMessage, SystemMessage 规范使用, 构建并保存对话信息
+- 以 TypedDict 规范使用, 保存主要的LangGraph状态流动
+
+
 
 ## 4. Streamlit集成
 
 ### 4.1 状态管理
 ```python
 # 1. 图的初始化
-def init_game_graph():
+def build_graph(checkpointer: Checkpointer):
     """初始化游戏图实例"""
     graph = StateGraph(State)
     graph.add_node("player_turn", player_turn)
     graph.add_edge(START, "player_turn")
     graph.add_edge("player_turn", END)
-    return graph.compile()
+
+    if not checkpointer:
+        raise ValueError("build graph error, checkpointer is required")
+
+    return graph.compile(checkpointer=checkpointer)
 
 # 2. 状态初始化
 def init_game_state() -> State:
@@ -242,23 +247,51 @@ def init_game_state() -> State:
         "game_over": False
     }
 
+# 3. 初始化游戏状态
+def init_game_app():
+    st.session_state.game_started = True
+    st.session_state.checkpointer = MemorySaver()
+    st.session_state.thread_id = str(random.randint(1, 1000000))
+    config = {"configurable": {"thread_id": st.session_state.thread_id}}
+    st.session_state.config = config
+    st.session_state.graph = build_graph(checkpointer=st.session_state.checkpointer)
+
+
 # 3. 主游戏循环
 def run_game():
     """主游戏循环"""
-    if "graph" not in st.session_state:
-        st.session_state.graph = init_game_graph()
-    if "game_state" not in st.session_state:
-        st.session_state.game_state = init_game_state()
-    
-    try:
-        result = st.session_state.graph.invoke(st.session_state.game_state)
-        st.session_state.game_state = result
+
+    if "graph" not in st.session_state or "game_state" not in st.session_state:
+        init_game_app()
+        init_game_state = init_game_state()
+        config = st.session_state.config
+        print(f"[main] initial invoke ----")
+        # 启动图, 必须在interrupt, resume前, 初始化图一次invoke, 写入init_game_state
+        st.session_state.game_state = st.session_state.graph.invoke(init_game_state, config=config)
+        print(f"[main] after initial invoke ----")
         st.session_state.require_update = True
-    except Exception as e:
-        st.error(f"Graph execution error: {str(e)}")
+
+    # ....(streamlit main UI render code)
+    render_main()
+
+    # 调用图的 invoke 方法执行游戏流程
+    config = {"configurable": {"thread_id": st.session_state.thread_id}}
+    print(f"[main] Before main invoke ----")
+    st.session_state.game_state = st.session_state.graph.invoke(
+        Command(resume=None), 
+        config=config)
+    print(f"[main] After main invoke ----")
+            
+    # 检查是否需要重新渲染(必须摆在整个main最后)
+    if st.session_state.need_rerun:
+        st.session_state.need_rerun = False
+        print(f"[main] need_rerun ----", time.time())
+        st.rerun()
+
+
 ```
 
-### 4.2 渲染树设计
+### 4.2 streamlit 渲染树设计
 ```python
 # 1. 主渲染函数
 def render_main():
@@ -270,10 +303,6 @@ def render_main():
     render_game_board()
     render_controls()
     
-    if st.session_state.require_update:
-        st.session_state.require_update = False
-        st.rerun()
-
 # 2. 子渲染函数
 def render_game_board():
     """游戏板渲染"""
@@ -287,34 +316,11 @@ def handle_player_action():
         st.session_state.require_update = True
 ```
 
-### 4.3 状态同步
-```python
-def handle_player_action(action: str):
-    """处理玩家操作并同步状态"""
-    try:
-        command = Command(resume=action)
-        result = st.session_state.graph.invoke(command)
-        st.session_state.game_state = result
-        st.session_state.require_update = True
-    except Exception as e:
-        st.error(f"Action processing error: {str(e)}")
-
-def render_game_state():
-    """渲染游戏状态"""
-    state = st.session_state.game_state
-    st.write("Current Turn:", state["current_turn"])
-    if "messages" in state:
-        for msg in state["messages"]:
-            st.write(msg["content"])
-```
-
 ## 5. 最佳实践
 
 ### 5.1 状态管理
 1. 图的调用规范:
 - 使用invoke()执行主要逻辑
-- stream()仅用于调试
-- 正确处理Command
 
 2. 状态一致性:
 - 及时同步状态
@@ -331,21 +337,25 @@ def render_game_state():
 - 单一更新入口
 - 批量处理更新
 - 避免重复渲染
+- 禁止在main()中使用st.rerun() 会造成中断代码
+- 使用session_state.require_update = True 来触发更新
 
-### 5.3 性能优化
-1. 状态更新:
-- 减少不必要调用
-- 合理使用缓存
-- 避免频繁重渲染
-
-2. 错误处理:
-- 完善异常捕获
-- 友好错误提示
-- 保持状态一致
 
 ## 6. 调试与监控
 
-### 6.1 状态监控
+### 6.1 调试编码
+- 尽量减少 try..except 代码, 直接输出错误信息到终端
+- 在节点函数进入时, print输出节点名称
+- 在特定命令前后, print输出调用前后信息, 以下为特定命令:
+    - 在invoke()前后
+    - 在interrupt()前后
+    - 在resume()前后
+    - 在goto()前后
+    - 在goto_node()前后
+- 在调用st.rerun()时, 输出函数名称, rerun时间戳记
+
+
+### 6.2 状态监控
 ```python
 def debug_state_change(state: State):
     """调试状态变化(仅用于开发)"""
@@ -393,18 +403,9 @@ def log_state_action(action: str, state: State):
         st.error(f"Logging error: {str(e)}")
 ```
 
-### 6.2 调试建议
+### 6.3 调试建议
 1. 状态检查:
 - 使用 `debug_state_change()` 监控状态
 - 使用 `log_state_action()` 记录操作
 - 在开发环境中启用调试功能
 
-2. 错误处理:
-- 捕获并显示详细错误信息
-- 保持状态一致性
-- 提供回滚机制
-
-3. 调试工具:
-- 使用Streamlit内置组件显示信息
-- 保持日志可追踪性
-- 避免影响生产环境 
