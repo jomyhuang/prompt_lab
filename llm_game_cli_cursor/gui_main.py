@@ -114,7 +114,7 @@ def render_welcome_screen():
 
 def render_game_view():
     """渲染游戏主界面"""
-    # 获取游戏状态
+    # 获取游戏  状态
     game_state = st.session_state.game_state_manager.get_game_state()
     
     # 如果游戏未开始，显示欢迎界面
@@ -152,6 +152,18 @@ def render_chat_view():
     user_input = st.chat_input("输入你的行动或问题...", key="chat_input")
     if user_input:
         add_user_chat_input(user_input)
+
+        game_state = st.session_state.game_state_manager.get_game_state()
+        response = st.write_stream(
+            st.session_state.llm_interaction.generate_ai_response_stream(st.session_state.user_chat_input,game_state)
+        )   
+        # response = st.write_stream(
+        #     st.session_state.llm_interaction.generate_ai_response(st.session_state.user_chat_input,game_state)
+        # )
+        add_assistant_message(response)
+        st.session_state.user_chat_input = ""
+        require_update = True
+
 
 def render_action_view():
     """渲染玩家操作界面"""
@@ -247,15 +259,15 @@ async def _process_game_loop():
         st.session_state.processing_state = True
         
         # 检查是否有LLM响应
-        if st.session_state.user_chat_input:
-            game_state = st.session_state.game_state_manager.get_game_state()
-            response = await st.session_state.llm_interaction.generate_ai_response(
-                st.session_state.user_chat_input,
-                game_state
-            )
-            add_assistant_message(response)
-            st.session_state.user_chat_input = ""
-            require_update = True
+        # if st.session_state.user_chat_input:
+        #     game_state = st.session_state.game_state_manager.get_game_state()
+        #     response = await st.session_state.llm_interaction.generate_ai_response(
+        #         st.session_state.user_chat_input,
+        #         game_state
+        #     )
+        #     add_assistant_message(response)
+        #     st.session_state.user_chat_input = ""
+        #     require_update = True
         
         # 如果需要强制更新,重置标志并更新界面
         if st.session_state.get("require_update", False):
