@@ -207,7 +207,7 @@ class GameAgent:
             graph.add_node("end", self._end_game)
             
             # 3. 设置边和条件
-            # # one-way turn
+            # 3-1. one-way loop
             # graph.add_edge(START, "init")
             # graph.add_edge("init", "welcome")
             # graph.add_edge("welcome", "route")
@@ -216,7 +216,7 @@ class GameAgent:
             # graph.add_edge("ai_turn", "end")
             # graph.add_edge("end", END)
 
-            # route to player and ai turn
+            # 3.2 route to player and ai turn
             graph.add_edge(START, "init")
             graph.add_edge("init", "welcome")
             graph.add_edge("welcome", "route")
@@ -311,16 +311,12 @@ class GameAgent:
         # action = interrupt("interrupt from route_state")
         # print("[route_state] After interrupt ---- action:", action)
         # state["last_action"] = action
-        
-        # # 更新可用动作
-        # if action == "start":
-        #     state["current_turn"] = "player"
 
         if state["current_turn"] == "start":
             state["current_turn"] = "player"
 
         if state["current_turn"] == "player":
-            state["valid_actions"] = ["play", "end_turn"]
+            state["valid_actions"] = ["play", "end_turn", "game_over"]
             state["info"] = "请选择行动"
         elif state["current_turn"] == "ai":
             state["valid_actions"] = []

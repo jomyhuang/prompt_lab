@@ -271,12 +271,9 @@ def render_action_view():
         if "play" in valid_actions:
             with button_cols[0]:
                 if st.button("出牌", key="play", use_container_width=True):
-                    add_user_message("测试goto")
-                    # 使用graph.invoke resume
+                    add_user_message("出牌")
                     print(f"Before play button invoke ----")
-                    # BUG: 使用goto会导致错误
-                    # st.session_state.game_agent.resume_agent(Command(goto="end"))
-                    st.session_state.game_agent.resume_agent(Command(resume="game_over", update={"phase": "game_over!!"}))
+                    st.session_state.game_agent.resume_agent(Command(resume="play", update={"phase": "play this card"}))
                     print(f"After play button invoke ----")
         
         if "end_turn" in valid_actions:
@@ -293,7 +290,14 @@ def render_action_view():
                     # )
                     # st.session_state.game_state = state
                     # st.session_state.game_agent.set_game_state(state)
-                    print(f"After end turn button invoke ----")
+                if st.button("结束游戏", key="game_over", use_container_width=True):
+                    add_user_message("结束游戏")
+                    # 使用graph.invoke resume
+                    print(f"Before game over button invoke ----")
+                    # BUG: 使用goto会导致错误
+                    # st.session_state.game_agent.resume_agent(Command(goto="end"))
+                    st.session_state.game_agent.resume_agent(Command(resume="game_over", update={"phase": "game_over!!"}))
+                    print(f"After game over button invoke ----")
                 
         with button_cols[2]:
             if st.button("给出建议", key="get_advice", use_container_width=True):
