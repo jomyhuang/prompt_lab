@@ -17,9 +17,24 @@ logger = logging.getLogger(__name__)
 class LLMInteraction:
     """LLM交互管理器
     
-    处理与大语言模型的交互，包括命令解析和响应生成
+    处理与大语言模型的交互，包括:
+    1. 初始化和配置LLM模型
+    2. 管理对话历史
+    3. 生成AI响应
+    4. 解析用户命令
+    5. 维护上下文
     """
+    
     def __init__(self):
+        """初始化LLM交互管理器
+        
+        配置内容:
+        1. 选择并初始化LLM模型(google/openai/deepseek)
+        2. 设置对话历史
+        3. 配置上下文提示模板
+        4. 创建对话处理链
+        """
+        
         # 初始化LLM模型
         use_model = "deepseek"  # 可选: google, openai, deepseek
         
@@ -85,12 +100,18 @@ class LLMInteraction:
     async def generate_ai_response(self, user_input: str, game_state: dict) -> str:
         """生成AI响应
         
+        处理流程:
+        1. 准备上下文信息
+        2. 调用LLM生成响应
+        3. 处理响应格式
+        4. 更新对话历史
+        
         Args:
-            user_input: 用户输入
+            user_input: 用户输入文本
             game_state: 当前游戏状态
             
         Returns:
-            str: AI的响应
+            str: 生成的AI响应
         """
         try:
             # 准备上下文
@@ -178,11 +199,22 @@ class LLMInteraction:
     def parse_user_action(self, user_input: str) -> Dict[str, Any]:
         """解析用户输入为游戏动作
         
+        处理流程:
+        1. 记录用户输入历史
+        2. 使用LLM解析意图
+        3. 转换为标准动作格式
+        4. 错误处理和回退
+        
         Args:
-            user_input: 用户输入
+            user_input: 用户输入文本
             
         Returns:
-            Dict[str, Any]: 解析后的动作
+            Dict[str, Any]: 解析后的动作数据
+            {
+                "action": str,     # 动作类型
+                "target": str,     # 目标对象
+                "parameters": dict # 附加参数
+            }
         """
         try:
             # 添加用户输入到历史记录
