@@ -362,10 +362,11 @@ def main():
                 st.session_state.game_started = True
                 initial_state = init_game()
                 checkpointer = MemorySaver()
-                st.session_state.graph = build_graph(checkpointer=checkpointer)
+                st.session_state.graph = build_graph(checkpointer=checkpointer, thread_id=st.session_state.thread_id)
                 # 使用graph.invoke初始化游戏状态
                 print(f"[main] Before initial invoke ----")
                 config = {"configurable": {"thread_id": st.session_state.thread_id}}
+                st.session_state.config = config
                 st.session_state.game_state = st.session_state.graph.invoke(initial_state, config=config)
                 print(f"[main] After initial invoke ----")
                 st.rerun()

@@ -4,14 +4,24 @@ import time
 import asyncio
 from typing import Optional
 from datetime import datetime
-from game_state import GameStateManager, GameAction
-from game_workflow import GameWorkflow
+from game_graph import GameGraph, GameAction
 from llm_interaction import LLMInteraction
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+import logging
 
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
-def init_session_state():
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.DEBUG)
+logger.addHandler(console_handler)
+
+def _init_session_state():
     """初始化会话状态
     
     使用st.session_state管理GUI状态:
@@ -23,7 +33,7 @@ def init_session_state():
     """
     if "initialized" not in st.session_state:
         # 游戏逻辑状态管理器
-        st.session_state.game_state_manager = GameStateManager()
+        st.session_state.game_graph = GameGraph()
         st.session_state.llm_interaction = LLMInteraction()
         st.session_state.messages = []
         st.session_state.initialized = True
@@ -33,26 +43,44 @@ def init_session_state():
         st.session_state.game_started = False
         st.session_state.player_info = {}
         st.session_state.current_message = "欢迎来到游戏!"
-        st.session_state.user_chat_input = ""
+        st.session_state._user_chat_input = None
         st.session_state.require_update = False
         st.session_state.processing_state = False
 
         add_system_message("欢迎来到游戏!")
-        print(f"[init_session_state] Initialized ----")
+        logger.info(f"_init_session_state Initialized ----")
+
+def _init_gamegraph():
+    # 初始化游戏LangGraph工作流
+    if "graph" not in st.session_state:
+        checkpointer = MemorySaver()
+        config = {"configurable": {"thread_id": st.session_state.thread_id}}
+        st.session_state.config = config
+
+        game_graph = GameGraph(checkpointer=checkpointer, thread_id=st.session_state.thread_id)
+        st.session_state.graph = game_graph.graph
+
+        initial_state = st.session_state.game_graph.get_game_state()
+        # st.session_state.game_state 用于取用便利, 不要做任何修改
+        st.session_state.game_state = st.session_state.graph.invoke(initial_state, config=config)
+        logger.info("_init_gamegraph success initial invoke start-to-route")
 
 def render_sidebar_controls():
     """渲染侧边栏控制界面"""
     with st.sidebar:
         st.header("🛠️ 游戏控制台")
-        
-        # 显示游戏状态
-        with st.expander("🔍 查看游戏状态", expanded=True):
-            game_state = st.session_state.game_state_manager.get_game_state()
-            st.json(game_state)
-        
+
         # 手动更新按钮
         if st.button("手动更新界面"):
             st.rerun()
+
+        # 显示游戏状态
+        game_state = st.session_state.game_graph.get_game_state()
+
+        if game_state:
+            with st.expander("🔍 查看游戏状态", expanded=True):
+                st.json(game_state, expanded=3)
+        
 
 def render_game_stats(game_state: dict):
     """渲染游戏状态信息
@@ -95,7 +123,7 @@ def render_welcome_screen():
         # 开始游戏按钮
         if st.button("开始游戏", use_container_width=True):
             # 初始化游戏状态
-            initial_state = st.session_state.game_state_manager.init_game_state()
+            initial_state = st.session_state.game_graph.init_game_state()
             
             # 更新GUI状态
             st.session_state.game_started = True
@@ -104,29 +132,31 @@ def render_welcome_screen():
             # 使用graph.invoke初始化游戏状态
             print(f"[welcome] Before initial invoke ----")
             config = {"configurable": {"thread_id": st.session_state.thread_id}}
-            result = st.session_state.workflow.invoke(initial_state, config=config)
+            result = st.session_state.game_graph.graph.invoke(initial_state, config=config)
             print(f"[welcome] After initial invoke ----")
             
-            # 更新游戏状态
-            st.session_state.game_state_manager.set_game_state(result)
+            # 更新游戏状态 check!! TODO: state sync, set_game_state的必要性
+            st.session_state.game_state = result
+            # st.session_state.game_graph.set_game_state(result)
             st.session_state.require_update = True
             st.rerun()
 
 def render_game_view():
     """渲染游戏主界面"""
-    # 获取游戏  状态
-    game_state = st.session_state.game_state_manager.get_game_state()
+    # 获取游戏状态
+    game_state = st.session_state.game_graph.get_game_state()
     
+
+    # 渲染侧边栏控制
+    render_sidebar_controls()
+
     # 如果游戏未开始，显示欢迎界面
     if not st.session_state.game_started:
         render_welcome_screen()
         return
     
     st.header("🎮 LLM Game Framework", divider="rainbow")
-    
-    # 渲染侧边栏控制
-    render_sidebar_controls()
-    
+
     # 显示游戏状态
     st.caption(f"当前游戏阶段: {game_state['phase']}")
     render_game_stats(game_state)
@@ -148,26 +178,23 @@ def render_chat_view():
             with st.chat_message(message.type):
                 st.markdown(message.content)
     
+    require_update = False
     # 渲染对话输入框
     user_input = st.chat_input("输入你的行动或问题...", key="chat_input")
     if user_input:
         add_user_chat_input(user_input)
-
-        game_state = st.session_state.game_state_manager.get_game_state()
-        response = st.write_stream(
-            st.session_state.llm_interaction.generate_ai_response_stream(st.session_state.user_chat_input,game_state)
-        )   
-        # response = st.write_stream(
-        #     st.session_state.llm_interaction.generate_ai_response(st.session_state.user_chat_input,game_state)
-        # )
-        add_assistant_message(response)
-        st.session_state.user_chat_input = ""
         require_update = True
 
+    return require_update
 
 def render_action_view():
+
+    # 只在游戏开始后显示动作区
+    if not st.session_state.game_started:
+        return
+    
     """渲染玩家操作界面"""
-    game_state = st.session_state.game_state_manager.get_game_state()
+    game_state = st.session_state.game_graph.get_game_state()
     
     if game_state["current_turn"] == "player":
         st.markdown("### 🎮 你的回合")
@@ -209,7 +236,7 @@ def add_assistant_message(message: str):
 
 def add_user_chat_input(message: str):
     """添加用户聊天输入"""
-    st.session_state.user_chat_input = message
+    st.session_state._user_chat_input = message
     add_user_message(message)
 
 def process_command_input(user_input: str):
@@ -232,19 +259,19 @@ def process_command_input(user_input: str):
     )
     
     # 获取当前状态
-    current_state = st.session_state.game_state_manager.get_game_state()
+    current_state = st.session_state.game_graph.get_game_state()
     
     # 使用graph.invoke恢复执行
     config = {"configurable": {"thread_id": st.session_state.thread_id}}
     print(f"[process_command_input] Before invoke ----")
-    result = st.session_state.workflow.invoke(
+    result = st.session_state.game_graph.graph.invoke(
         Command(resume=action, update=current_state),
         config=config
     )
     print(f"[process_command_input] After invoke ----")
     
     # 更新游戏状态
-    st.session_state.game_state_manager.update_state(result, game_action)
+    st.session_state.game_graph.update_state(result, game_action)
     st.session_state.require_update = True
 
 async def _process_game_loop():
@@ -258,16 +285,16 @@ async def _process_game_loop():
     try:
         st.session_state.processing_state = True
         
-        # 检查是否有LLM响应
-        # if st.session_state.user_chat_input:
-        #     game_state = st.session_state.game_state_manager.get_game_state()
-        #     response = await st.session_state.llm_interaction.generate_ai_response(
-        #         st.session_state.user_chat_input,
-        #         game_state
-        #     )
-        #     add_assistant_message(response)
-        #     st.session_state.user_chat_input = ""
-        #     require_update = True
+        #检查是否有LLM响应
+        if st.session_state._user_chat_input:
+            game_state = st.session_state.game_graph.get_game_state()
+            response = await st.session_state.llm_interaction.generate_ai_response(
+                st.session_state._user_chat_input,
+                game_state
+            )
+            add_assistant_message(response)
+            st.session_state._user_chat_input = None
+            require_update = True
         
         # 如果需要强制更新,重置标志并更新界面
         if st.session_state.get("require_update", False):
@@ -280,13 +307,21 @@ async def _process_game_loop():
     return require_update
 
 # 初始化会话状态
-init_session_state()
+_init_session_state()
 
-# 初始化游戏工作流
-if "workflow" not in st.session_state:
-    checkpointer = MemorySaver()
-    st.session_state.workflow = GameWorkflow(checkpointer=checkpointer)
-    st.session_state.workflow.build_graph()
+# 初始化游戏LangGraph工作流 -- 直到route节点,进入Human-in-loop
+_init_gamegraph()
+
+# if "graph" not in st.session_state:
+#     checkpointer = MemorySaver()
+#     game_graph = GameGraph(checkpointer=checkpointer)
+#     st.session_state.graph = game_graph.graph
+#     config = {"configurable": {"thread_id": st.session_state.thread_id}}
+#     st.session_state.config = config
+#     initial_state = st.session_state.game_graph.get_game_state()
+#     # st.session_state.game_state 用于取用便利
+#     st.session_state.game_state = st.session_state.graph.invoke(initial_state, config=config)
+#     logger.info("success initial invoke start-to-route")
 
 async def main():
     """主函数"""
@@ -307,14 +342,20 @@ async def main():
     
     # 渲染聊天区
     with chat_col:
-        render_chat_view()
-        # 只在游戏开始后显示动作区
-        if st.session_state.game_started:
-            render_action_view()
-        
+        if render_chat_view():
+            # 新的对话优先进行刷新
+            print(f"[main] new chat piority rerun {time.time()}")
+            st.rerun()
+            st.session_state.require_update = False
+
+        # 渲染动作区
+        render_action_view()
+    
+    # 处理状态更新
     if await _process_game_loop():
-        print(f"_process_game_loop rerun {time.time()}")
+        print(f"[main] after _process_game_loop rerun {time.time()}")
         st.rerun()
+        st.session_state.require_update = False
 
 if __name__ == "__main__":
     asyncio.run(main()) 
