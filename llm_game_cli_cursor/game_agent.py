@@ -1,9 +1,10 @@
 import streamlit as st
-from typing import Dict, Any, Optional, List, TypedDict
+from typing import Dict, Any, Optional, List, TypedDict, Annotated
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import interrupt, Command
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langgraph.graph.message import add_messages
 from dataclasses import dataclass
 from datetime import datetime
 import logging
@@ -24,7 +25,7 @@ class GameState(TypedDict):
     - 错误处理: error, info
     """
     game_started: bool          # 游戏是否开始
-    messages: List[dict]        # 对话历史记录
+    messages: Annotated[list, add_messages]        # 对话历史记录
     current_turn: str           # 当前回合玩家
     game_over: bool            # 游戏是否结束 
     game_data: dict            # 游戏数据(棋盘/卡牌等)
@@ -98,22 +99,22 @@ class GameAgent:
         """
         try:
             # 1. 创建状态图
-            builder = StateGraph(GameState)
+            graph_builder = StateGraph(GameState)
             
             # 2. 添加节点
-            builder.add_node("init", self._init_state)
-            builder.add_node("welcome", self._welcome_state)
-            builder.add_node("route", self._route_state)
-            builder.add_node("player_turn", self._player_turn)
-            builder.add_node("ai_turn", self._ai_turn)
-            builder.add_node("end", self._end_game)
+            graph_builder.add_node("init", self._init_state)
+            graph_builder.add_node("welcome", self._welcome_state)
+            graph_builder.add_node("route", self._route_state)
+            graph_builder.add_node("player_turn", self._player_turn)
+            graph_builder.add_node("ai_turn", self._ai_turn)
+            graph_builder.add_node("end", self._end_game)
             
             # 3. 设置边和条件
-            builder.add_edge(START, "init")
-            builder.add_edge("init", "welcome")
-            builder.add_edge("welcome", "route")
+            graph_builder.add_edge(START, "init")
+            graph_builder.add_edge("init", "welcome")
+            graph_builder.add_edge("welcome", "route")
 
-            builder.add_conditional_edges(
+            graph_builder.add_conditional_edges(
                 "route",
                 self._route_condition,
                 {
@@ -122,15 +123,15 @@ class GameAgent:
                     "end": "end"
                 }
             )
-            builder.add_edge("player_turn", "route")
-            builder.add_edge("ai_turn", "route")
-            builder.add_edge("end", END)
+            graph_builder.add_edge("player_turn", "route")
+            graph_builder.add_edge("ai_turn", "route")
+            graph_builder.add_edge("end", END)
 
             if not self.checkpointer:
                 logger.error("build graph error, checkpointer is required")
                 raise ValueError("build graph error, checkpointer is required")
             
-            return builder.compile(checkpointer=self.checkpointer)
+            return graph_builder.compile(checkpointer=self.checkpointer)
             
         except Exception as e:
             logger.error(f"Failed to build graph: {str(e)}")
@@ -162,6 +163,50 @@ class GameAgent:
         self.set_game_state(new_state)
         logger.info("resume_agent after invoke")
         return new_state
+
+    def run_agent_stream(self, state: GameState=None, config: dict=None) -> GameState:
+        if state is None:
+            state = self.get_game_state()
+
+        if config is None:
+            config = {"configurable": {"thread_id": self.thread_id}}
+
+        logger.info("run_agent_stream before invoke")
+        for chunk in self.graph.stream(state, config=config, stream_mode="updates"):
+            for key, value in chunk.items():
+                print(f"来自节点 '{key}' 的输出:")
+                print("---")
+                print(value)
+                print("\n---")
+            yield chunk
+        # self.set_game_state(new_state)
+        logger.info("run_agent_stream after invoke")
+        return chunk
+
+    def resume_agent_stream(self, command: Command=None, config: dict=None):
+        if command is None:
+            command = Command(resume="resume")
+
+        if config is None:
+            config = {"configurable": {"thread_id": self.thread_id}}
+
+        logger.info("resume_agent_stream before invoke")
+        # for chunk in self.graph.stream(command, config=config, stream_mode="values"):
+        for chunk in self.graph.stream(command, config=config, stream_mode="updates"):
+            for key, value in chunk.items():
+                print(f"来自节点 '{key}' 的输出:")
+                print("---")
+                print(value)
+                print("\n---")
+            yield chunk
+
+        # response = self.graph.stream(command, config=config)
+        # for chunk in response:
+        #     yield chunk
+        # self.set_game_state(response)
+        logger.info("resume_agent_stream after invoke")
+        return chunk
+
 
     def validate_state(self, state: GameState) -> bool:
         """验证游戏状态的有效性"""

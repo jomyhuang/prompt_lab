@@ -1,6 +1,6 @@
 
 01/03/2025
--[x] 输入对话后, user_chat_input 无法直接刷新
+-[o] 输入对话后, user_chat_input 无法直接刷新
 streaming test
 https://docs.streamlit.io/develop/tutorials/llms/build-conversational-apps
 
@@ -17,5 +17,15 @@ https://docs.streamlit.io/develop/tutorials/llms/build-conversational-apps
     - 跟AI 想玩任何?
     - 载入不同prompt 连接上下文
 
+将chat包在agent内
+
+
+
+Links:
 
 https://alejandro-ao.com/how-to-use-streaming-in-langchain-and-streamlit/
+
+https://github.com/shiv248/Streamlit-x-LangGraph-Cookbooks
+
+how-to-guide 中文
+https://github.com/jurnea/LangGraph-Chinese/blob/master/HowtoGuides.md
