@@ -17,26 +17,39 @@ if 'initialized' not in st.session_state:
     st.session_state.game_manager = GameManager()
     st.session_state.llm_interaction = LLMInteraction()
     st.session_state.player_manager = PlayerManager()
+    # 设置命令处理器
+    st.session_state.llm_interaction.set_commands_processor(st.session_state.game_manager.commands_processor)
     st.session_state.messages = [{"role": "assistant", "content": "准备好战斗了吗？"}]
     st.session_state.initialized = True
     st.session_state.ai_input = ""
+    st.session_state.require_update = False
     # 初始化卡牌选择状态
     st.session_state.card_selection = {
         "is_selecting": False,  # 是否处于选择状态
-        "action_type": None,    # 动作类型 (attack/play/etc)
-        "source_type": None,    # 来源类型 (hand/field)
-        "target_type": None,    # 目标类型 (opponent_field/opponent_hero)
-        "selected_card": None,  # 已选择的卡牌
-        "target_card": None,    # 已选择的目标
-        "callback": None        # 选择完成后的回调函数
+        "selection_type": None,    # 选择类型 (attacker/target/hand/opponent_hand)
+        "valid_cards": None,    # 可选择的卡牌列表
+        "player_type": None,    # 玩家类型 (player/opponent)
+        "selected_card_id": None,  # 已选择的卡牌ID
+        "message": None,        # 显示的提示信息
+        "can_skip": False      # 是否可以放弃选择
     }
 
-def update_ui_state(show_success_message=None):
-    """更新界面状态
-    Args:
-        show_success_message (str, optional): 如果提供，显示成功消息
-    """
-    st.rerun()
+# 在session_state中添加处理锁
+if "processing_state" not in st.session_state:
+    st.session_state.processing_state = False
+
+def update_ui_state():
+    """更新界面状态"""
+    # 添加更新时间戳
+    st.session_state["last_update_time"] = time.time()
+    print(f"update_ui_state: {st.session_state['last_update_time']}")
+    # # 只有在真正需要时才重新运行
+    # if st.session_state.get("require_rerun", False):
+    #     st.session_state.require_rerun = False
+    #     st.rerun()
+    st.session_state.require_update = True
+    # st.rerun()
+
 
 def render_sidebar_controls(game_state, gameloop_state):
     """渲染侧边栏控制界面"""
@@ -74,11 +87,11 @@ def render_sidebar_controls(game_state, gameloop_state):
                         st.error(message)
         
         if st.button("手动更新界面"):
-            update_ui_state("手动更新界面")
+            st.rerun()
             
         # 使用expander显示游戏状态
         with st.expander("🔍 查看游戏状态", expanded=True):
-            st.json(game_state)
+            st.json(game_state, expanded=2)
 
 def render_deck_selection():
     """渲染卡组选择界面"""
@@ -113,7 +126,7 @@ def render_deck_selection():
                     if card_id in cards_dict:
                         card = cards_dict[card_id]
                         st.write(f"- {card['name']} ({card['type']}, 费用:{card['cost']})")
-    
+
     # 渲染对手卡组选择
     with col2:
         st.markdown("#### 🤖 选择对手卡组")
@@ -133,14 +146,20 @@ def render_deck_selection():
                     if card_id in cards_dict:
                         card = cards_dict[card_id]
                         st.write(f"- {card['name']} ({card['type']}, 费用:{card['cost']})")
-    
+
+    if player_deck and opponent_deck:
+        st.session_state.game_manager.selected_decks = {
+                "player": decks_data[player_deck]['cards'],
+                "opponent": decks_data[opponent_deck]['cards']
+        }
+
     # 开始游戏按钮
     if st.button("开始游戏", key="start_game", use_container_width=True):
         st.session_state.game_manager.selected_decks = {
             "player": decks_data[player_deck]['cards'],
             "opponent": decks_data[opponent_deck]['cards']
         }
-        process_user_input("开始游戏")
+        process_command_input("开始游戏")
         return
 
 def render_game_stats(game_state):
@@ -268,54 +287,28 @@ def render_game_view():
         st.caption("手牌")
         st.markdown(f"✋ {len(player_hand)}")
 
-def _process_game_loop():
-    """处理游戏循环"""
-    game_manager = st.session_state.game_manager
-    require_update = False
-    
-    # 检查是否有命令正在执行
-    if game_manager.is_executing_commands():
-        current, total = st.session_state.game_manager.get_current_command_progress()
-        progress_text = f"执行命令 {current}/{total}"
-        st.progress(current / total, text=progress_text)
-        # 执行下一个命令
-        success = game_manager.process_next_command()
-        require_update = True
-    
-    # 检查是否有LLM响应
-    if st.session_state.ai_input:
-        _process_user_input_ai(st.session_state.ai_input)
-        st.session_state.ai_input = ""
-        require_update = True
-    
-    return require_update
-
-def _process_user_input_ai(message):
+async def _process_user_input_ai(user_input):
     """AI处理用户输入"""
-    # 获取当前游戏状态
-    game_state = st.session_state.game_manager.get_game_state()
-    
-    # 记录调试信息
-    debug_utils.log("llm", "处理用户输入", {
-        "用户输入": message
-    })
-    
-    # 显示运行状态
-    status_container = st.container()
-    with status_container:
-        with st.status("AI响应...", state="running", expanded=False) as status:
-            # 生成AI响应
-            ai_response = st.session_state.llm_interaction.generate_ai_response(message, game_state)
-            status.update(label="完成", state="complete")
-    
-    # 添加AI响应到消息历史
-    st.session_state.messages.append({"role": "assistant", "content": ai_response.content})
-    
-    # 记录调试信息
-    debug_utils.log("game", "AI响应", {"响应内容": ai_response.content})
+    if user_input:
+        st.session_state.messages.append({"role": "user", "content": user_input})
+        game_state = st.session_state.game_manager.get_game_state()
+        
+        # 显示运行状态
+        status_container = st.container()
+        with status_container:
+            with st.status("AI响应...", state="running", expanded=False) as status:
+                ai_message = await st.session_state.llm_interaction.generate_ai_response(user_input, game_state)
+                status.update(label="AI响应完成", state="complete", expanded=False)
+                
+        st.session_state.messages.append({"role": "assistant", "content": ai_message})
 
-def process_user_input(user_input):
+def process_command_input(user_input):
     """处理用户输入"""
+    # 检查是否有命令正在执行
+    if st.session_state.game_manager.is_executing_commands():
+        st.session_state.game_manager.add_game_message("❌ 当前有命令正在执行，请等待完成")
+        return
+
     with st.spinner("处理中..."):
         add_user_message(user_input)
         # 解析用户输入
@@ -325,7 +318,6 @@ def process_user_input(user_input):
         # 如果是开始游戏的操作
         if game_state["gameloop_state"] == "welcome" and "开始" in user_input and "游戏" in user_input:
             st.session_state.game_manager.start_game()
-            return
         
         # 如果是使用卡牌的操作，将卡牌从手牌移到场上
         elif "使用" in user_input and "卡牌" in user_input:
@@ -336,35 +328,20 @@ def process_user_input(user_input):
                 })
                 
                 # 使用卡牌（会自动处理命令）
-                result = st.session_state.game_manager.play_card(str(selected_card_id))
-            return
+                result = st.session_state.game_manager.play_card(selected_card_id)
     
         # 如果是攻击的操作
         elif "攻击" in user_input:
-            if st.session_state.card_selection["is_selecting"]:
-                selected_card = st.session_state.card_selection["selected_card"]
-                target_card = st.session_state.card_selection["target_card"]
-                if selected_card:
-                    target_id = target_card["id"] if isinstance(target_card, dict) else target_card
-                    # success_attack = asyncio.run( st.session_state.game_manager.async_perform_attack(
-                    #     attacker_card_id=selected_card["id"],
-                    #     target_card_id=target_id,
-                    #     player_type="player"
-                    # ) )
-                    success_attack = st.session_state.game_manager.perform_attack(
-                        attacker_card_id=selected_card["id"],
-                        target_card_id=target_id,
-                        player_type="player"
-                    )
-                end_card_selection()
-            else:
-                start_card_selection("attack", "field", "opponent_field")
-            return
-    
+            result = st.session_state.game_manager.player_perform_attack()
+            if not result:
+                # 如果return False, BUGFIX: 无法继续执行(无法主动刷新)
+                # 使用指令命令序列输出错误, 触发更新
+                update_ui_state()
+ 
         # 如果是结束回合的操作，直接结束回合
         elif "结束" in user_input and "回合" in user_input:
-            st.session_state.game_manager.game_state["player_turn_state"] = "end_turn"
-            return
+            st.session_state.game_manager.end_turn()
+            # st.session_state.game_manager.game_state["player_turn_state"] = "end_turn"
 
         # 不理解用户输入
         else:
@@ -372,15 +349,20 @@ def process_user_input(user_input):
             debug_utils.log("game", "无法处理用户输入", {
                 "用户输入": user_input
             })
-        
 
 def render_action_controls():
     """渲染玩家行动控制界面"""
+    
+    # # 用户输入区域
+    # user_input = st.chat_input("输入你的行动或问题...", key="chat_input")
+    # if user_input:
+    #     add_user_input_ai(user_input)
+    #     return
+
     # 玩家手牌和操作区
     available_cards = st.session_state.game_manager.get_available_cards()
     # 按费用排序卡牌
     sorted_cards = sorted(available_cards, key=lambda card: card.get('cost', 0))
-
     # 卡牌选择
     selected_card_id = st.selectbox(
         "选择卡牌",
@@ -389,13 +371,6 @@ def render_action_controls():
                               for card in sorted_cards if str(card['id']) == x), x),
         key="card_select"
     )
-    
-    # 用户输入区域
-    user_input = st.chat_input("输入你的行动或问题...", key="chat_input")
-    if user_input:
-        add_user_input_ai(user_input)
-        update_ui_state()
-        return
 
     # 创建按钮列
     button_cols = st.columns(4)
@@ -406,8 +381,7 @@ def render_action_controls():
             card = next((card for card in sorted_cards if str(card['id']) == selected_card_id), None)
             if card:
                 message = f"我使用{card['name']}卡牌"
-                process_user_input(message)
-                update_ui_state()
+                process_command_input(message)
                 return
     
     # 攻击按钮
@@ -418,13 +392,12 @@ def render_action_controls():
         
         attack_button_text = "⚔️ 攻击"
         if has_attacked:
-            attack_button_text = "⚔️ 已攻击"
+            attack_button_text = "⚔️ 本回合已攻击"
         elif is_first_turn:
             attack_button_text = "⚔️ 第一回合禁止攻击"
         
         if st.button(attack_button_text, key="attack", use_container_width=True, disabled=attack_disabled):
-            start_card_selection("attack", "field", "opponent_field")
-            update_ui_state()
+            process_command_input("我要攻击")
             return
     
     # 建议按钮        
@@ -434,15 +407,13 @@ def render_action_controls():
             if card:
                 message = f"分析当前局势，并给出使用{card['name']}的建议"
                 add_user_input_ai(message)
-                update_ui_state()
                 return
     
     # 结束回合按钮
     with button_cols[3]:
         if st.button("结束回合", key="end_turn", use_container_width=True):
             message = "我要结束当前回合"
-            process_user_input(message)
-            update_ui_state()
+            process_command_input(message)
             return
 
     # 显示选中卡牌信息
@@ -475,15 +446,20 @@ def render_chat_view():
         user_input = st.chat_input("输入你的行动或问题...", key="chat_input")
         if user_input:
             add_user_input_ai(user_input)
-            update_ui_state()
+            return
+    else:
+        # 用户输入区域
+        user_input = st.chat_input("输入你的行动或问题...", key="chat_input")
+        if user_input:
+            add_user_input_ai(user_input)
             return
 
-    # 处理游戏循环并检查是否需要更新UI
-    if _process_game_loop():
-        update_ui_state()
-        return
+def render_action_view():
+    """渲染玩家操作界面"""
+    game_state = st.session_state.game_manager.get_game_state()
+    gameloop_state = game_state.get("gameloop_state", "welcome")
 
-    elif gameloop_state == "player_turn":
+    if gameloop_state == "player_turn":
         # 玩家回合界面
         st.markdown("### 🎮 你的回合")
         
@@ -498,35 +474,10 @@ def render_chat_view():
         if player_turn_state == "action":
             # 在action阶段渲染玩家操作界面
             render_action_controls()
-        else:
-            # 非action阶段，自动处理游戏状态
-            st.session_state.game_manager._process_gameloop_state()
 
     elif gameloop_state == "opponent_turn":
         # 对手回合界面
         st.markdown("### 🤖 对手回合")
-        st.session_state.game_manager._process_gameloop_state()
-
-    # 处理自动过渡一个状态        
-    last_state = st.session_state.get("last_gameloop_state", None)
-    if (gameloop_state != "welcome" and 
-        gameloop_state != "player_turn" and 
-        gameloop_state != "opponent_turn"):
-        
-        if gameloop_state == last_state:
-            debug_utils.log("state", "！！！状态重复", {
-                "当前状态": gameloop_state,
-                "上次状态": last_state,
-                "玩家回合状态": st.session_state.game_manager.game_state.get("player_turn_state"),
-                "对手回合状态": st.session_state.game_manager.game_state.get("opponent_turn_state")
-            })
-        else:
-            # 处理状态
-            st.session_state["last_gameloop_state"] = gameloop_state
-            st.session_state.game_manager._process_gameloop_state()
-    
-    # 记录当前状态
-    st.session_state["last_gameloop_state"] = gameloop_state
 
 def add_user_message(message):
     """添加用户消息"""
@@ -538,117 +489,263 @@ def add_assistant_message(message):
 
 def add_user_input_ai(message):
     """添加用户输入AI"""
-    add_user_message(message)
+    # add_user_message(message)
     st.session_state.ai_input = message
 
-def start_card_selection(action_type, source_type, target_type, callback=None):
+def start_card_selection(selection_type: str, valid_cards: list, player_type: str, message: str = None):
     """开始卡牌选择流程
     
     Args:
-        action_type: 动作类型 (attack/play/etc)
-        source_type: 来源类型 (hand/field)
-        target_type: 目标类型 (opponent_field/opponent_hero)
-        callback: 选择完成后的回调函数
+        selection_type: 选择类型 (attacker/target/hand/opponent_hand)
+        valid_cards: 可选择的卡牌列表
+        player_type: 玩家类型 (player/opponent)
+        message: 显示的提示信息
     """
     st.session_state.card_selection = {
         "is_selecting": True,
-        "action_type": action_type,
-        "source_type": source_type,
-        "target_type": target_type,
-        "selected_card": None,
-        "target_card": None,
-        "callback": callback
+        "selection_type": selection_type,
+        "valid_cards": valid_cards,
+        "player_type": player_type,
+        "selected_card_id": None,
+        "message": message
     }
+    st.session_state.card_selection_active = True
 
-def end_card_selection():
-    """结束卡牌选择流程"""
-    if st.session_state.card_selection["callback"]:
-        st.session_state.card_selection["callback"](
-            st.session_state.card_selection["selected_card"],
-            st.session_state.card_selection["target_card"]
-        )
+def end_card_selection(cancel: bool = False):
+    """结束卡牌选择
+    
+    Args:
+        cancel: 是否是取消选择
+    """
+    selected_card_id = st.session_state.card_selection.get("selected_card_id")
+    
+    if cancel:
+        # 如果是取消选择,中断当前命令序列
+        st.session_state.game_manager.interrupt_command_sequence()
+        st.session_state.game_manager.add_game_message("❌ 已取消当前行动")
+        # 强制触发游戏循环更新
+        st.session_state.require_update = True
+    elif selected_card_id:
+        # 如果是确认选择,调用GameManager的处理函数
+        st.session_state.game_manager.handle_card_selection(selected_card_id)
+
+    # 清理选择状态
     st.session_state.card_selection = {
         "is_selecting": False,
-        "action_type": None,
-        "source_type": None,
-        "target_type": None,
-        "selected_card": None,
-        "target_card": None,
-        "callback": None
+        "selection_type": None,
+        "valid_cards": None,
+        "player_type": None,
+        "selected_card_id": None,
+        "message": None,
+        "can_skip": False
     }
+    # 重置卡牌选择活动状态
+    st.session_state.card_selection_active = False
 
 def render_card_selection():
     """渲染卡牌选择界面"""
-    if not st.session_state.card_selection["is_selecting"]:
+    if not st.session_state.card_selection.get("is_selecting"):
         return
 
-    game_state = st.session_state.game_manager.get_game_state()
     selection = st.session_state.card_selection
-
-    # 获取来源卡牌列表
-    source_cards = []
-    if selection["source_type"] == "hand":
-        source_cards = game_state.get("hand_cards", {}).get("player", [])
-    elif selection["source_type"] == "field":
-        source_cards = game_state.get("field_cards", {}).get("player", [])
-
-    # 获取目标卡牌列表
-    target_cards = []
-    if selection["target_type"] == "opponent_field":
-        target_cards = game_state.get("field_cards", {}).get("opponent", [])
-
-    # 渲染来源卡牌选择
-    if source_cards:
-        source_id = st.selectbox(
-            "选择卡牌",
-            options=[str(card['id']) for card in source_cards],
-            format_func=lambda x: next((f"{card['name']} (攻击力:{card.get('attack', 0)})" 
-                                if selection["action_type"] == "attack" 
-                                else f"{card['name']} (费用:{card.get('cost', 0)})"
-                                for card in source_cards if str(card['id']) == x), x),
-            key="source_select"
+    
+    # 显示提示信息
+    if selection.get("message"):
+        st.info(selection["message"])
+    
+    # 获取可选择的卡牌列表
+    valid_cards = selection.get("valid_cards", [])
+    
+    # 如果是目标选择且目标是英雄,添加英雄选项
+    if selection["selection_type"] == "target":
+        valid_cards = list(valid_cards)  # 创建副本
+        if not any(card.get('id') == 'opponent_hero' for card in valid_cards):
+            valid_cards.append({
+                "id": "opponent_hero",
+                "name": "对手英雄",
+                "type": "hero"
+            })
+    
+    # 渲染卡牌选择
+    if valid_cards:
+        # 根据选择类型显示不同的标签
+        select_label = {
+            "attacker": "选择攻击者",
+            "target": "选择攻击目标",
+            "hand": "选择手牌",
+            "opponent_hand": "选择对手手牌"
+        }.get(selection["selection_type"], "选择卡牌")
+        
+        card_id = st.selectbox(
+            select_label,
+            options=[str(card['id']) for card in valid_cards],
+            format_func=lambda x: next((
+                "对手英雄" if card['id'] == "opponent_hero"
+                else f"{card['name']} - 攻击力:{card.get('attack', 0)} 生命值:{card.get('health', 0)}"
+                for card in valid_cards if str(card['id']) == x
+            ), x),
+            key="card_select"
         )
-        selection["selected_card"] = next((card for card in source_cards if str(card['id']) == source_id), None)
+        selection["selected_card_id"] = card_id
 
-    # 渲染目标选择
-    if selection["target_type"] == "opponent_field":
-        if target_cards:
-            target_options = [str(card['id']) for card in target_cards]
-            if selection["action_type"] == "attack":
-                target_options.append("opponent_hero")
-            target_id = st.selectbox(
-                "选择目标",
-                options=target_options,
-                format_func=lambda x: "对手英雄" if x == "opponent_hero" else next((f"{card['name']} (生命值:{card.get('health', 0)})" 
-                                            for card in target_cards if str(card['id']) == x), x),
-                key="target_select"
-            )
-            if target_id == "opponent_hero":
-                selection["target_card"] = "opponent_hero"
-            else:
-                selection["target_card"] = next((card for card in target_cards if str(card['id']) == target_id), None)
-        elif selection["action_type"] == "attack":
-            st.info("对手场上没有卡牌,将直接攻击对手英雄")
-            selection["target_card"] = "opponent_hero"
+        # 显示选中卡牌的详细信息
+        selected_card = next((card for card in valid_cards if str(card['id']) == card_id), None)
 
-    # 确认按钮
-    if st.button("确认", key="confirm_selection", use_container_width=True):
-        if selection["selected_card"]:
-            if selection["action_type"] == "attack":
-                # 构造攻击命令
-                attacker_card = selection["selected_card"]
-                target_card = selection["target_card"]
-                if target_card == "opponent_hero":
-                    message = f"我用{attacker_card['name']}攻击对手英雄"
+        # 创建按钮列
+        button_cols = st.columns([1, 1])
+        
+        # 确认按钮
+        with button_cols[0]:
+            if st.button("确认选择", key="confirm_selection", use_container_width=True):
+                if selection["selected_card_id"]:
+                    # 确保在调用end_card_selection之前设置选中的卡牌ID
+                    st.session_state.card_selection["selected_card_id"] = card_id
+                    end_card_selection()
+        
+        # 放弃按钮
+        with button_cols[1]:
+            if st.button("放弃行动", key="cancel_selection", use_container_width=True, type="secondary"):
+                end_card_selection(cancel=True)
+
+        if selected_card and selected_card['id'] != 'opponent_hero':
+            st.markdown(f"""
+            **选中的卡牌:**
+            - 名称: {selected_card['name']}
+            - 类型: {selected_card['type']}
+            - 攻击力: {selected_card.get('attack', 0)}
+            - 生命值: {selected_card.get('health', 0)}
+            - 效果: {selected_card.get('effect', '无')}
+            """)
+
+
+async def _process_game_loop():
+    """处理游戏循环"""
+    game_manager = st.session_state.game_manager
+    require_update = False
+    
+    # 检查是否正在处理状态
+    if st.session_state.processing_state:
+        return False
+        
+    try:
+        st.session_state.processing_state = True
+
+        # 检查是否有命令正在执行
+        if game_manager.is_executing_commands():
+            current, total = game_manager.get_current_command_progress()
+            
+            # 检查是否处于暂停状态
+            if game_manager.command_sequence_state.get('is_paused'):
+                # 如果暂停中,显示等待选择的提示
+                selection_state = game_manager.command_sequence_state.get('awaiting_selection')
+                if selection_state:
+                    selection_type = selection_state.get('type')
+                    progress_text = f"等待选择{selection_type}... ({current}/{total})"
+                    
+                    # 检查是否需要启动卡牌选择模式
+                    if not st.session_state.get('card_selection_active'):
+                        if selection_type == 'attacker':
+                            # 启动攻击者选择
+                            valid_cards = selection_state.get('valid_cards', [])
+                            player_type = selection_state.get('player_type', 'player')
+                            start_card_selection(
+                                selection_type='attacker',
+                                valid_cards=valid_cards,
+                                player_type=player_type,
+                                message="🎯 请选择一个攻击者，选择后将显示可攻击的目标"
+                            )
+                        elif selection_type == 'target':
+                            # 启动目标选择
+                            valid_targets = selection_state.get('valid_cards', [])
+                            player_type = selection_state.get('player_type', 'player')
+                            opponent_type = "opponent" if player_type == "player" else "player"
+                            start_card_selection(
+                                selection_type='target',
+                                valid_cards=valid_targets,
+                                player_type=opponent_type,
+                                message="🎯 请选择一个攻击目标，或选择攻击对手英雄"
+                            )
+                        elif selection_type == 'hand':
+                            # 启动手牌选择
+                            valid_cards = selection_state.get('valid_cards', [])
+                            player_type = selection_state.get('player_type', 'player')
+                            start_card_selection(
+                                selection_type='hand',
+                                valid_cards=valid_cards,
+                                player_type=player_type,
+                                message="🎯 请选择一张手牌"
+                            )
+                        elif selection_type == 'opponent_hand':
+                            # 启动对手手牌选择
+                            valid_cards = selection_state.get('valid_cards', [])
+                            player_type = selection_state.get('player_type', 'opponent')
+                            start_card_selection(
+                                selection_type='opponent_hand',
+                                valid_cards=valid_cards,
+                                player_type=player_type,
+                                message="🎯 请选择一张对手手牌"
+                            )
+                        
+                        require_update = True
                 else:
-                    message = f"我用{attacker_card['name']}攻击{target_card['name']}"
-                # 处理攻击命令
-                process_user_input(message)
-            end_card_selection()
-            update_ui_state()
-            return
+                    progress_text = f"命令序列已暂停 ({current}/{total})"
+            else:
+                progress_text = f"执行命令 {current}/{total}"
+                # 如果不再暂停,清除卡牌选择状态
+                if st.session_state.get('card_selection_active'):
+                    st.session_state.card_selection_active = False
+                
+            st.progress(current / total, text=progress_text)
+            
+            # 只在非暂停状态下执行下一个命令
+            if not game_manager.command_sequence_state.get('is_paused'):
+                has_next_command = await game_manager.async_process_next_command()
+                require_update = True
+    
+        # 检查是否有LLM响应
+        if st.session_state.ai_input:
+            await _process_user_input_ai(st.session_state.ai_input)
+            st.session_state.ai_input = ""
+            require_update = True
 
-def main():
+        # 检查状态是否需要自动过渡
+        game_state = st.session_state.game_manager.get_game_state()
+        current_gameloop_state = game_state.get("gameloop_state", "welcome")
+        current_player_turn_state = game_state.get("player_turn_state", "init")
+        current_opponent_turn_state = game_state.get("opponent_turn_state", "init")
+        last_gameloop_state = st.session_state.get("last_gameloop_state", "welcome")
+        last_player_turn_state = st.session_state.get("last_player_turn_state", "end_turn")
+        last_opponent_turn_state = st.session_state.get("last_opponent_turn_state", "end_turn")
+
+        # 检查状态是否发生变化
+        if last_gameloop_state and current_gameloop_state != last_gameloop_state:
+            st.session_state["last_gameloop_state"] = current_gameloop_state
+            st.session_state.game_manager._process_gameloop_state()
+            require_update = True
+
+        if current_gameloop_state == "player_turn":
+            if current_player_turn_state != last_player_turn_state:
+                st.session_state["last_player_turn_state"] = current_player_turn_state
+                st.session_state.game_manager._process_gameloop_state()
+                require_update = True
+                    
+        elif current_gameloop_state == "opponent_turn":
+            if current_opponent_turn_state != last_opponent_turn_state:
+                st.session_state["last_opponent_turn_state"] = current_opponent_turn_state
+                st.session_state.game_manager._process_gameloop_state()
+                require_update = True
+
+        # 如果需要强制更新,重置标志并更新界面
+        if st.session_state.get("require_update", False):
+            st.session_state.require_update = False
+            require_update = True
+
+    finally:
+        st.session_state.processing_state = False
+
+    return require_update
+
+async def main():
     """主函数"""
     # 设置页面配置
     st.set_page_config(
@@ -663,11 +760,58 @@ def main():
     
     # 渲染游戏区
     with game_col:
-        render_game_view()
-    
+        render_game_view()    
+
     # 渲染聊天区
     with chat_col:
         render_chat_view()
+        render_action_view()
 
-if __name__ == "__main__":
-    main()
+        if await _process_game_loop():
+            # 如果需要更新,重置标志并重新渲染
+            print(f"_process_game_loop rerun {time.time()}")
+            st.rerun()
+
+if __name__ == '__main__':
+
+    if "game_manager" not in st.session_state:
+       # 初始化游戏状态
+       st.session_state.game_manager =  GameManager()
+        # 初始化消息列表
+       st.session_state.messages = []
+    # 初始化卡牌选择状态
+    if "card_selection" not in st.session_state:
+        st.session_state.card_selection = {
+            "is_selecting": False,  # 是否处于选择状态
+            "selection_type": None,    # 选择类型 (attacker/target/hand/opponent_hand)
+            "valid_cards": None,    # 可选择的卡牌列表
+            "player_type": None,    # 玩家类型 (player/opponent)
+            "selected_card_id": None,  # 已选择的卡牌ID
+            "message": None,        # 显示的提示信息
+            "can_skip": False      # 是否可以放弃选择
+        }
+    asyncio.run(main())
+
+# def main():
+#     """主函数"""
+#     # 设置页面配置
+#     st.set_page_config(
+#         page_title="🎮 LLM Card Studio",
+#         page_icon="🎮",
+#         layout="wide",
+#         initial_sidebar_state="collapsed"
+#     )
+    
+#     # 分割界面为游戏区和聊天区
+#     game_col, chat_col = st.columns([1, 1])
+    
+#     # 渲染游戏区
+#     with game_col:
+#         render_game_view()
+    
+#     # 渲染聊天区
+#     with chat_col:
+#         render_chat_view()
+
+# if __name__ == "__main__":
+#     main()

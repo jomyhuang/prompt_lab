@@ -54,6 +54,7 @@ MODEL_VENDORS = {
         models=["moonshot-v1-32k",
         "Doubao-pro-128k",
         "gemini-2.0-flash-exp",
+        "deepseek-chat",
         "gpt-3.5-turbo",
         "claude-3-sonnet-20240229",
         "claude-3-5-sonnet-20240620",

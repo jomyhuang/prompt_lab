@@ -1,8 +1,9 @@
 {
     "temperature": 0.0,
-    "selected_vendor_name": "GoogleAPI",
+    "selected_vendor_name": "SMALLAI",
     "selected_models": [
-        "gemini-2.0-flash-exp"
+        "Doubao-pro-128k",
+        "deepseek-chat"
     ],
     "selected_prompt_project": "建造系统"
 }

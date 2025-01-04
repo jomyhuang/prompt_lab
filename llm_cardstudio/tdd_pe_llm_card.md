@@ -1,5 +1,53 @@
 
 
+
+
+
+
+# 结合langchain中的tool calling功能, 呼叫 @llm_commands_interaction.py 中的指令集
+
+0. 不要任意修改UI布局, 不要任意修改_process_game_loop中的任意代码
+1. 修改 @llm_commands_interaction.py 内, 增加一个能够使用langchian tool calling 的框架, 调用游戏的命令集在 @llm_commands_interaction.py 内, 不要特别新增新的类
+2. 增加命令集handle函数在 @llm_commands_interaction.py, 可以兼容已有的handle command
+3. 显示通过process_user_input_ai 指令 llm_interaction.generate_ai_response 实现 start_game,end_turn 工具呼叫, 如果没有 tool_calls 则传回一般性对话
+4. 不要使用agent相关函数, 采用 bind_tools tool_calls
+
+建立工具参考新的命令集
+https://python.langchain.com/docs/how_to/custom_tools/
+
+类似范例
+```
+from langchain_core.tools import tool
+
+@tool
+def multiply(a: int, b: int) -> int:
+    """Multiply two numbers."""
+    return a * b
+
+
+# Let's inspect some of the attributes associated with the tool.
+print(multiply.name)
+print(multiply.description)
+print(multiply.args)
+
+
+llm_with_tools = llm.bind_tools(tools)
+
+query = "What is 3 * 12?"
+
+llm_with_tools.invoke(query)
+
+
+query = "What is 3 * 12? Also, what is 11 + 49?"
+
+llm_with_tools.invoke(query).tool_calls
+```
+
+
+
+
+# 在命令序列中增加攻击Human-loop-HMI
+
 1.在 gui_main.py 中增加攻击UI, 进入呼叫perform_attack前, 如果没有指定的攻击者,或是没有指定的目标,则激活UI进入选择攻击者或是选择目标
 在render_chat_view 对话框下方的攻击按钮,按下后,
 在下方,使用selectbox选择我方场上的卡牌,选择敌方场上的卡牌
@@ -12,9 +60,7 @@
 4-2. 将伤害的卡牌移动到墓地,计算对手伤害
 5. 结束攻击, 回到action阶段玩家后续行动
 
-
-
-
+# 命令集
 
 
         self.command_handlers = {
