@@ -86,7 +86,57 @@ class GameAgent:
             error=None,
             info=None
         )
-    
+
+    def build_graph(self) -> StateGraph:
+        """构建游戏流程图
+        
+        Returns:
+            StateGraph: 构建好的状态图
+            
+        Raises:
+            RuntimeError: 图构建失败时抛出
+        """
+        try:
+            # 1. 创建状态图
+            builder = StateGraph(GameState)
+            
+            # 2. 添加节点
+            builder.add_node("init", self._init_state)
+            builder.add_node("welcome", self._welcome_state)
+            builder.add_node("route", self._route_state)
+            builder.add_node("player_turn", self._player_turn)
+            builder.add_node("ai_turn", self._ai_turn)
+            builder.add_node("end", self._end_game)
+            
+            # 3. 设置边和条件
+            builder.add_edge(START, "init")
+            builder.add_edge("init", "welcome")
+            builder.add_edge("welcome", "route")
+
+            builder.add_conditional_edges(
+                "route",
+                self._route_condition,
+                {
+                    "player": "player_turn",
+                    "ai": "ai_turn",
+                    "end": "end"
+                }
+            )
+            builder.add_edge("player_turn", "route")
+            builder.add_edge("ai_turn", "route")
+            builder.add_edge("end", END)
+
+            if not self.checkpointer:
+                logger.error("build graph error, checkpointer is required")
+                raise ValueError("build graph error, checkpointer is required")
+            
+            return builder.compile(checkpointer=self.checkpointer)
+            
+        except Exception as e:
+            logger.error(f"Failed to build graph: {str(e)}")
+            raise RuntimeError(f"Graph build failed: {str(e)}")
+
+   
     def run_agent(self, state: GameState=None, config: dict=None) -> GameState:
         if state is None:
             state = self.get_game_state()
@@ -152,98 +202,6 @@ class GameAgent:
             self.game_state = state
             logger.info("game_state set: new value")
 
-    def build_graph(self) -> StateGraph:
-        """构建游戏流程图
-        
-        Returns:
-            StateGraph: 构建好的状态图
-            
-        Raises:
-            RuntimeError: 图构建失败时抛出
-        """
-
-    # # 创建StateGraph
-    # workflow = StateGraph(GameState)
-    
-    # # 添加节点
-    # workflow.add_node("init_state", init_state)
-    # workflow.add_node("route", route_state)
-    # workflow.add_node("player_action", player_action)  # 合并后的玩家动作节点
-    # workflow.add_node("computer_action", computer_action)
-    # workflow.add_node("handle_end", handle_game_over)
-    
-    # # 设置边和条件
-    # workflow.add_edge(START, "init_state")
-    # workflow.add_edge("init_state", "route")
-    
-    # workflow.add_conditional_edges(
-    #     "route",
-    #     lambda x: (
-    #         "handle_end" if x["game_over"] else
-    #         "player_action" if x["current_turn"] == "player" else
-    #         "computer_action"
-    #     )
-    # )
-    
-    # # 从player_action直接到computer_action
-    # workflow.add_edge("player_action", "route")
-    
-    # # 从computer_action回到route
-    # workflow.add_edge("computer_action", "route")
-    
-    # workflow.add_edge("handle_end", END)
-
-
-        try:
-            # 1. 创建状态图
-            graph = StateGraph(GameState)
-            
-            # 2. 添加节点
-            graph.add_node("init", self._init_state)
-            graph.add_node("welcome", self._welcome_state)
-            graph.add_node("route", self._route_state)
-            graph.add_node("player_turn", self._player_turn)
-            graph.add_node("ai_turn", self._ai_turn)
-            graph.add_node("end", self._end_game)
-            
-            # 3. 设置边和条件
-            # 3-1. one-way loop
-            # graph.add_edge(START, "init")
-            # graph.add_edge("init", "welcome")
-            # graph.add_edge("welcome", "route")
-            # graph.add_edge("route", "player_turn")
-            # graph.add_edge("player_turn", "ai_turn")
-            # graph.add_edge("ai_turn", "end")
-            # graph.add_edge("end", END)
-
-            # 3.2 route to player and ai turn
-            graph.add_edge(START, "init")
-            graph.add_edge("init", "welcome")
-            graph.add_edge("welcome", "route")
-
-            graph.add_conditional_edges(
-                "route",
-                self._route_condition,
-                {
-                    "player": "player_turn",
-                    "ai": "ai_turn",
-                    "end": "end"
-                }
-            )
-            graph.add_edge("player_turn", "route")
-            graph.add_edge("ai_turn", "route")
-            graph.add_edge("end", END)
-
-            if not self.checkpointer:
-                logger.error("build graph error, checkpointer is required")
-                raise ValueError("build graph error, checkpointer is required")
-            
-            return graph.compile(checkpointer=self.checkpointer)
-            
-        except Exception as e:
-            logger.error(f"Failed to build graph: {str(e)}")
-            raise RuntimeError(f"Graph build failed: {str(e)}")
-    
     def _init_state(self, state: GameState) -> GameState:
         """初始化游戏状态节点
         
@@ -367,7 +325,7 @@ class GameAgent:
             "game_data": state["game_data"]
         }
         state["info"] = "玩家回合开始"
-        st.session_state.messages.append(AIMessage(content="玩家回合开始"))
+        # st.session_state.messages.append(AIMessage(content="玩家回合开始"))
 
         # 使用interrupt等待玩家操作
         print("[player_turn] Before interrupt ----")

@@ -77,14 +77,6 @@ def _init_game_agent():
         config = {"configurable": {"thread_id": st.session_state.thread_id}}
         st.session_state.config = config
 
-        # logger.info("_init_game_agent before initial invoke start-to-route")
-        # initial_state = st.session_state.game_agent.get_game_state()
-        # st.session_state.game_agent.run_agent(initial_state)
-        # # state = st.session_state.game_agent.graph.invoke(initial_state, config=config)
-        # # st.session_state.game_state = state
-        # # st.session_state.game_agent.set_game_state(state)
-        # logger.info("_init_game_agent after initial invoke start-to-route")
-
 def render_sidebar_controls():
     """渲染侧边栏控制界面
     
@@ -226,6 +218,17 @@ def render_chat_view():
             # message 采用langchain规范对话类型: SystemMessage, HumanMessage, AIMessage
             with st.chat_message(message.type):
                 st.markdown(message.content)
+        # 测试stream对话输出
+        if st.session_state._user_chat_input is not None and st.session_state._user_chat_input != "":
+            game_state = st.session_state.game_agent.get_game_state()
+            async_response = st.session_state.llm_interaction.generate_ai_response_stream(
+                st.session_state._user_chat_input,
+                game_state
+            )
+            response = st.write_stream(async_response)
+            add_assistant_message(response)
+            st.session_state._user_chat_input = None
+        # TODO: Agent graph streaming 输出
     
     require_update = False
     # 渲染对话输入框
@@ -335,6 +338,8 @@ def process_command_input(user_input: str):
     # st.session_state.game_agent.update_state(result, game_action)
     # st.session_state.require_update = True
 
+
+# 核心逻辑代码, 不能任意修改 === 代码开始
 async def _process_game_loop():
     """处理游戏循环
     
@@ -355,19 +360,17 @@ async def _process_game_loop():
         st.session_state.processing_state = True
         game_agent = st.session_state.game_agent
 
-        # === 原有代码(保留) ===
-        if st.session_state._user_chat_input:
-            game_state = st.session_state.game_agent.get_game_state()
-            response = await st.session_state.llm_interaction.generate_ai_response(
-                st.session_state._user_chat_input,
-                game_state
-            )
-            add_assistant_message(response)
-            st.session_state._user_chat_input = None
-            require_update = True
-        # === 原有代码结束 ===
+        # 处理调用LLM对话生成
+        # if st.session_state._user_chat_input:
+        #     game_state = st.session_state.game_agent.get_game_state()
+        #     response = await st.session_state.llm_interaction.generate_ai_response(
+        #         st.session_state._user_chat_input,
+        #         game_state
+        #     )
+        #     add_assistant_message(response)
+        #     st.session_state._user_chat_input = None
+        #     require_update = True
 
-        # === 修改优化代码 ===
         # 1. 游戏启动处理
         if st.session_state.game_started and not game_agent.get_game_state()["game_started"]:
             logger.info("[process_game_loop] Starting game workflow")
@@ -376,16 +379,20 @@ async def _process_game_loop():
             return require_update
 
         # 2. 处理GUI反馈信号
-        if st.session_state.gui_feedback:  # 修改为gui_feedback
+        if st.session_state.gui_feedback:
             feedback = st.session_state.gui_feedback
             params = st.session_state.gui_feedback_params
             logger.info(f"[process_game_loop] Processing GUI feedback: {feedback}, params: {params}")
             
-            # 构建 Command 对象
-            command = Command(
-                resume=feedback,
-                update=params  # 使用反馈参数更新状态
-            )
+            # 判断feedback是否已经是Command类型
+            if isinstance(feedback, Command):
+                command = feedback
+            else:
+                # 构建 Command 对象
+                command = Command(
+                    resume=feedback,
+                    update=params  # 使用反馈参数更新状态
+                )
             
             # 调用 resume_agent 处理反馈
             game_agent.resume_agent(command)
@@ -404,6 +411,7 @@ async def _process_game_loop():
         st.session_state.processing_state = False
         
     return require_update
+# 核心逻辑代码, 不能任意修改 === 代码结束
 
 async def main():
     """主函数

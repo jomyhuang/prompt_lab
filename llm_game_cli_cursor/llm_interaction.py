@@ -8,6 +8,7 @@ import json
 import logging
 from typing import List, Dict, Any, Optional
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+import asyncio
 
 # 加载环境变量
 load_dotenv()
@@ -140,39 +141,26 @@ class LLMInteraction:
             logger.error(f"[generate_ai_response] Failed to generate AI response: {str(e)}")
             return "抱歉，生成响应时出现错误"
 
-    # def generate_ai_response_stream(self, user_input: str, game_state: dict):
-    #     """生成AI响应 streaming 测试
+    def generate_ai_response_stream(self, user_input: str, game_state: dict):
+        """生成AI响应 streaming 测试
         
-    #     Args:
-    #         user_input: 用户输入
-    #         game_state: 当前游戏状态
+        Args:
+            user_input: 用户输入
+            game_state: 当前游戏状态
             
-    #     Returns:
-    #         str: AI的响应
-    #     """
+        Returns:
+            str: AI的响应
+        """
 
-    #     # 准备上下文
-    #     context = {
-    #         "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
-    #         "chat_history": self.format_history(),
-    #         "user_input": user_input
-    #     }
+        # 准备上下文
+        context = {
+            "game_state": json.dumps(game_state, ensure_ascii=False, indent=2),
+            "chat_history": self.format_history(),
+            "user_input": user_input
+        }
         
-    #     # 生成响应
-    #     response = self.context_chain.invoke(context)
-        
-    #     content = response.content
-    #     # # print(f"[generate_ai_response] response ---- {response}")
-
-    #         # # 如果内容是列表，取第一个非空元素
-    #         # if isinstance(content, list):
-    #         #     content = next((item for item in content if item), "")
-            
-    #         # # 更新对话历史 (llm_interaction保留对话上下文)
-    #         # self.add_to_history("user", user_input)
-    #         # self.add_to_history("assistant", content)
-            
-    #     return content
+        # 生成响应
+        return self.context_chain.stream(context)
     
     def format_history(self) -> str:
         """格式化聊天历史
