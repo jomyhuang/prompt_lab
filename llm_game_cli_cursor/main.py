@@ -56,6 +56,11 @@ def _init_session_state():
         add_system_message("欢迎来到游戏!")
         logger.info("_init_session_state Initialized")
 
+        # === 修改 GUI 反馈标记 ===
+        st.session_state.gui_feedback = None  # GUI反馈信号
+        st.session_state.gui_feedback_params = {}  # GUI反馈的附加参数
+        # === 修改代码结束 ===
+
 def _init_game_agent():
     """初始化游戏Agent工作流
     
@@ -158,27 +163,13 @@ def render_welcome_screen():
         
         # 开始游戏按钮
         if st.button("开始游戏", use_container_width=True):
-            # 初始化游戏状态
-            game_state = st.session_state.game_agent.get_game_state()
-            # 更新GUI状态
             st.session_state.game_started = True
             st.session_state.current_message = "游戏开始！请选择你的行动。"
-            
-            # 使用graph.invoke resume
-            print(f"[welcome] Before start button invoke ----")
-            initial_state = st.session_state.game_agent.get_game_state()
-            st.session_state.game_agent.run_agent(initial_state)
-            # state = st.session_state.game_agent.graph.invoke(initial_state, config=config)
-            # st.session_state.game_state = state
-            # st.session_state.game_agent.set_game_state(state)
-
-            # st.session_state.game_agent.resume_agent(Command(resume="start"))
-            # config = {"configurable": {"thread_id": st.session_state.thread_id}}
-            # state = st.session_state.game_agent.graph.invoke(Command(resume="start"), config=config)
-            # st.session_state.game_state = state
-            # st.session_state.game_agent.set_game_state(state)
-            print(f"[welcome] After start button invoke ----")
-            
+            st.session_state.gui_feedback = "start"  # 修改为gui_feedback
+            st.session_state.gui_feedback_params = {
+                "phase": "game start",
+                "game_started": True
+            }
             st.session_state.require_update = True
 
 def render_game_view():
@@ -246,63 +237,45 @@ def render_chat_view():
     return require_update
 
 def render_action_view():
-    """渲染玩家操作界面
-    
-    显示:
-    - 当前回合提示
-    - 可用动作按钮
-    - 操作建议按钮
-    """
-    # 只在游戏开始后显示动作区
+    """渲染玩家操作界面"""
     if not st.session_state.game_started:
         return
     
-    """渲染玩家操作界面"""
     game_state = st.session_state.game_agent.get_game_state()
     
     if game_state["current_turn"] == "player":
         st.markdown("### 🎮 你的回合")
         
-        # 创建按钮列
         button_cols = st.columns(3)
-        
-        # 根据可用动作显示按钮
         valid_actions = game_state["valid_actions"]
-        if "play" in valid_actions:
-            with button_cols[0]:
-                if st.button("出牌", key="play", use_container_width=True):
-                    add_user_message("出牌")
-                    print(f"Before play button invoke ----")
-                    st.session_state.game_agent.resume_agent(Command(resume="play", update={"phase": "play this card"}))
-                    print(f"After play button invoke ----")
         
-        if "end_turn" in valid_actions:
-            with button_cols[1]:
-                if st.button("结束回合", key="end_turn", use_container_width=True):
-                    add_user_message("结束回合")
-                    # 使用graph.invoke resume
-                    print(f"Before end turn button invoke ----")
-                    st.session_state.game_agent.resume_agent(Command(resume="end_turn", update={"phase": "update from button"}))
-                    # config = {"configurable": {"thread_id": st.session_state.thread_id}}
-                    # state = st.session_state.game_agent.graph.invoke(
-                    #     Command(resume="end_turn"),
-                    #     config=config
-                    # )
-                    # st.session_state.game_state = state
-                    # st.session_state.game_agent.set_game_state(state)
-                if st.button("结束游戏", key="game_over", use_container_width=True):
-                    add_user_message("结束游戏")
-                    # 使用graph.invoke resume
-                    print(f"Before game over button invoke ----")
-                    # BUG: 使用goto会导致错误
-                    # st.session_state.game_agent.resume_agent(Command(goto="end"))
-                    st.session_state.game_agent.resume_agent(Command(resume="game_over", update={"phase": "game_over!!"}))
-                    print(f"After game over button invoke ----")
+        with button_cols[0]:
+            if "play" in valid_actions and st.button("出牌", key="play", use_container_width=True):
+                add_user_message("出牌")
+                # 修改为gui_feedback
+                st.session_state.gui_feedback = "play"
+                st.session_state.gui_feedback_params = {
+                    "phase": "play this card"
+                }
+                st.session_state.require_update = True
+        
+        with button_cols[1]:
+            if "end_turn" in valid_actions and st.button("结束回合", key="end_turn", use_container_width=True):
+                add_user_message("结束回合")
+                st.session_state.gui_feedback = "end_turn"  # 修改为gui_feedback
+                st.session_state.gui_feedback_params = {
+                    "phase": "end turn phase"
+                }
+                st.session_state.require_update = True
                 
-        with button_cols[2]:
-            if st.button("给出建议", key="get_advice", use_container_width=True):
-                add_user_chat_input("分析当前局势，给出建议")
-
+            if st.button("结束游戏", key="game_over", use_container_width=True):
+                add_user_message("结束游戏")
+                st.session_state.gui_feedback = "game_over"  # 修改为gui_feedback
+                st.session_state.gui_feedback_params = {
+                    "phase": "game over",
+                    "game_over": True
+                }
+                st.session_state.require_update = True
 
 def add_system_message(message: str):
     """添加系统消息到聊天历史
@@ -366,23 +339,23 @@ async def _process_game_loop():
     """处理游戏循环
     
     主要职责:
-    - 处理用户输入
-    - 生成AI响应
-    - 管理界面更新状态
+    1. 统一处理 game_agent 的运行和恢复
+    2. 处理用户输入和界面更新
     
-    Returns:
-        bool: 是否需要更新界面
+    工作流程:
+    1. run_agent: 游戏启动时调用
+    2. resume_agent: 处理所有GUI反馈信号
     """
     require_update = False
     
-    # 检查是否正在处理状态
     if st.session_state.processing_state:
         return False
         
     try:
         st.session_state.processing_state = True
-        
-        #检查是否有LLM响应
+        game_agent = st.session_state.game_agent
+
+        # === 原有代码(保留) ===
         if st.session_state._user_chat_input:
             game_state = st.session_state.game_agent.get_game_state()
             response = await st.session_state.llm_interaction.generate_ai_response(
@@ -392,8 +365,37 @@ async def _process_game_loop():
             add_assistant_message(response)
             st.session_state._user_chat_input = None
             require_update = True
-        
-        # 如果需要强制更新,重置标志并更新界面
+        # === 原有代码结束 ===
+
+        # === 修改优化代码 ===
+        # 1. 游戏启动处理
+        if st.session_state.game_started and not game_agent.get_game_state()["game_started"]:
+            logger.info("[process_game_loop] Starting game workflow")
+            game_agent.run_agent()
+            require_update = True
+            return require_update
+
+        # 2. 处理GUI反馈信号
+        if st.session_state.gui_feedback:  # 修改为gui_feedback
+            feedback = st.session_state.gui_feedback
+            params = st.session_state.gui_feedback_params
+            logger.info(f"[process_game_loop] Processing GUI feedback: {feedback}, params: {params}")
+            
+            # 构建 Command 对象
+            command = Command(
+                resume=feedback,
+                update=params  # 使用反馈参数更新状态
+            )
+            
+            # 调用 resume_agent 处理反馈
+            game_agent.resume_agent(command)
+            
+            # 清除已处理的GUI反馈
+            st.session_state.gui_feedback = None
+            st.session_state.gui_feedback_params = {}
+            require_update = True
+
+        # 3. 强制更新检查
         if st.session_state.require_update:
             st.session_state.require_update = False
             require_update = True
@@ -439,9 +441,9 @@ async def main():
     with chat_col:
         if render_chat_view():
             # 新的对话优先进行刷新
-            logger.info(f"[main] new chat piority rerun {time.time()}")
-            # st.session_state.require_update = False
-            # st.rerun()
+            logger.info(f"[main] new userchat input: {st.session_state._user_chat_input} piority rerun {time.time()}")
+            st.session_state.require_update = False
+            st.rerun()
 
         # 渲染动作区
         render_action_view()
