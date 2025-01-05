@@ -10,6 +10,7 @@ from datetime import datetime
 import logging
 import uuid
 import random
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +71,9 @@ class GameAgent:
         self.thread_id = thread_id
         self.game_state = self.init_game_state()
         self.graph = self.build_graph()
+        self.interrupt_state = None
+        self.stream_chunk = []
+        self.stream_flow = None
        
     def init_game_state(self) -> GameState:
         """初始化游戏状态"""
@@ -146,6 +150,9 @@ class GameAgent:
             config = {"configurable": {"thread_id": self.thread_id}}
 
         logger.info("run_agent before invoke")
+        # 中断状态清空
+        self.interrupt_state = None
+        self.stream_chunk = None
         new_state = self.graph.invoke(state, config=config)
         self.set_game_state(new_state)
         logger.info("run_agent after invoke")
@@ -159,12 +166,15 @@ class GameAgent:
             config = {"configurable": {"thread_id": self.thread_id}}
 
         logger.info("resume_agent before invoke")
+        # 中断状态清空
+        self.interrupt_state = None
+        self.stream_chunk = None
         new_state = self.graph.invoke(command, config=config)
         self.set_game_state(new_state)
         logger.info("resume_agent after invoke")
         return new_state
 
-    def run_agent_stream(self, state: GameState=None, config: dict=None) -> GameState:
+    def run_agent_stream(self, state: GameState=None, config: dict=None):
         if state is None:
             state = self.get_game_state()
 
@@ -172,40 +182,57 @@ class GameAgent:
             config = {"configurable": {"thread_id": self.thread_id}}
 
         logger.info("run_agent_stream before invoke")
+        # 中断状态清空
+        self.interrupt_state = None
+        self.stream_chunk = []
+
+        nodes_flow = "Streaming..."
+        yield nodes_flow
+
         for chunk in self.graph.stream(state, config=config, stream_mode="updates"):
             for key, value in chunk.items():
                 print(f"来自节点 '{key}' 的输出:")
                 print("---")
-                print(value)
-                print("\n---")
-            yield chunk
-        # self.set_game_state(new_state)
-        logger.info("run_agent_stream after invoke")
+                # print(value)
+                try:
+                    if not key == "__interrupt__":
+                        self.set_game_state(value)
+                    else:
+                        self.set_game_interrupt(value)
+                except Exception as e:
+                    logger.error(f"Error stream set game state: {str(e)}")
+                # print("\n---")
+            nodes_flow += f" -> {key}"
+            yield f" -> {key}"
+            self.stream_chunk.append(chunk)
+
+        self.stream_flow = nodes_flow
+        logger.info(f"finish run_agent_stream after invoke {datetime.now()}")
         return chunk
 
-    def resume_agent_stream(self, command: Command=None, config: dict=None):
-        if command is None:
-            command = Command(resume="resume")
+    # def resume_agent_stream(self, command: Command=None, config: dict=None):
+    #     if command is None:
+    #         command = Command(resume="resume")
 
-        if config is None:
-            config = {"configurable": {"thread_id": self.thread_id}}
+    #     if config is None:
+    #         config = {"configurable": {"thread_id": self.thread_id}}
 
-        logger.info("resume_agent_stream before invoke")
-        # for chunk in self.graph.stream(command, config=config, stream_mode="values"):
-        for chunk in self.graph.stream(command, config=config, stream_mode="updates"):
-            for key, value in chunk.items():
-                print(f"来自节点 '{key}' 的输出:")
-                print("---")
-                print(value)
-                print("\n---")
-            yield chunk
+    #     logger.info("resume_agent_stream before invoke")
+    #     # for chunk in self.graph.stream(command, config=config, stream_mode="values"):
+    #     for chunk in self.graph.stream(command, config=config, stream_mode="updates"):
+    #         for key, value in chunk.items():
+    #             print(f"来自节点 '{key}' 的输出:")
+    #             print("---")
+    #             print(value)
+    #             print("\n---")
+    #         yield chunk
 
-        # response = self.graph.stream(command, config=config)
-        # for chunk in response:
-        #     yield chunk
-        # self.set_game_state(response)
-        logger.info("resume_agent_stream after invoke")
-        return chunk
+    #     # response = self.graph.stream(command, config=config)
+    #     # for chunk in response:
+    #     #     yield chunk
+    #     # self.set_game_state(response)
+    #     logger.info("resume_agent_stream after invoke")
+    #     return chunk
 
 
     def validate_state(self, state: GameState) -> bool:
@@ -246,6 +273,16 @@ class GameAgent:
         if self.validate_state(state):
             self.game_state = state
             logger.info("game_state set: new value")
+
+    def set_game_interrupt(self, state: GameState):
+        """设置当前游戏Human-in-Loop中断状态"""
+        self.interrupt_state = state
+        print("set_game_interrupt: new value", self.interrupt_state)
+        logger.info("set_game_interrupt: new value")
+
+    def is_game_interrupt(self):
+        """判断当前游戏是否处于Human-in-Loop中断状态"""
+        return self.interrupt_state is not None
 
     def _init_state(self, state: GameState) -> GameState:
         """初始化游戏状态节点
@@ -327,6 +364,8 @@ class GameAgent:
         else:
             state["valid_actions"] = []
             state["info"] = f"unknown route {state['current_turn']}"
+
+        state["messages"]= f"_route_state {datetime.now()}"
             
         return state
     
@@ -387,6 +426,8 @@ class GameAgent:
             state["info"] = "游戏结束"
         else:
             state["info"] = f"未知操作: {action}"
+
+        state["messages"]= f"_player_turn {datetime.now()}"
                 
         return state
     

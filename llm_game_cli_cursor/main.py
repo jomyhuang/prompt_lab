@@ -38,9 +38,10 @@ def _init_session_state():
         st.session_state.current_message = "欢迎来到游戏!"  # 当前显示消息
         st.session_state._user_chat_input = None  # 用户输入缓存
         st.session_state.require_update = False  # GUI更新标志
+        st.session_state.require_update_chat = False  # 新对话更新标志
         st.session_state.processing_state = False  # 状态处理标志
         st.session_state.game_agent = None  # 游戏Agent实例
-        st.session_state.streaming = False
+        st.session_state.streaming = True
         st.session_state.debug = None
         
         # 配置日志
@@ -165,6 +166,7 @@ def render_welcome_screen():
                 "phase": "game start",
                 "game_started": True
             }
+            add_system_message("start run game agent....")
             st.session_state.require_update = True
 
 def render_game_view():
@@ -203,6 +205,7 @@ def render_game_view():
     if game_state["valid_actions"]:
         st.write("可用动作:", ", ".join(game_state["valid_actions"]))
 
+# 核心逻辑代码, 不能任意修改 === 代码开始
 def render_chat_view():
     """渲染聊天界面
     
@@ -215,7 +218,7 @@ def render_chat_view():
         bool: 是否需要更新界面
     """
     # 渲染聊天消息历史
-    chat_container = st.container(height=500)
+    chat_container = st.container(height=600)
     require_update = False
     with chat_container:
         for message in st.session_state.messages:
@@ -223,29 +226,42 @@ def render_chat_view():
             with st.chat_message(message.type):
                 st.markdown(message.content)
 
-        # 测试stream对话输出
+        
         if st.session_state._user_chat_input is not None and st.session_state._user_chat_input != "":
+            # 1-1.测试stream对话输出
             game_state = st.session_state.game_agent.get_game_state()
-            async_response = st.session_state.llm_interaction.generate_ai_response_stream(
-                st.session_state._user_chat_input,
-                game_state
-            )
-            response = st.write_stream(async_response)
-            print("after st.write_stream:",response)
+            with st.chat_message("assistant"):
+                response = st.write_stream(
+                    st.session_state.llm_interaction.generate_ai_response_stream(
+                        st.session_state._user_chat_input,game_state
+            ))
+            # 1-2.标准输出(代码不能删除)
+            # response = st.session_state.llm_interaction.generate_ai_response(
+            #             st.session_state._user_chat_input,game_state
+            # )
+            # with st.chat_message("assistant"):
+            #     st.markdown(response)
+
             add_assistant_message(response)
             st.session_state._user_chat_input = None
 
-        # 测试stream对话输出
-        if st.session_state.streaming:
+        # 2.有新的对话输出完后, 再进行agent run
+        if st.session_state.require_update_chat:
+            # st.session_state.require_update_chat = False
+            time.sleep(0.5)
+            require_update = True
+        elif st.session_state.streaming:
+        # 3. agent run 处理
             require_update = _process_streaming_agent()
     
     # 渲染对话输入框
     user_input = st.chat_input("输入你的行动或问题...", key="chat_input")
     if user_input:
         add_user_chat_input(user_input)
-        require_update = True
+        st.session_state.require_update_chat = True
 
     return require_update
+# 核心逻辑代码, 不能任意修改 === 代码结束
 
 def render_action_view():
     """渲染玩家操作界面"""
@@ -286,6 +302,7 @@ def render_action_view():
                     "phase": "game over",
                     "game_over": True
                 }
+                # st.session_state.game_started = False
                 st.session_state.require_update = True
 
 def add_system_message(message: str):
@@ -295,16 +312,19 @@ def add_system_message(message: str):
         message: 系统消息内容
     """
     st.session_state.messages.append(SystemMessage(content=message))
+    st.session_state.require_update_chat = True
     st.session_state.require_update = True
 
 def add_user_message(message: str):
     """添加用户消息"""
     st.session_state.messages.append(HumanMessage(content=message))
+    st.session_state.require_update_chat = True
     st.session_state.require_update = True
 
 def add_assistant_message(message: str):
     """添加助手消息"""
     st.session_state.messages.append(AIMessage(content=message))
+    st.session_state.require_update_chat = True
     st.session_state.require_update = True
 
 def add_user_chat_input(message: str):
@@ -333,19 +353,12 @@ def process_command_input(user_input: str):
     
     # 获取当前状态
     current_state = st.session_state.game_agent.get_game_state()
-    # # 使用graph.invoke恢复执行
-    # config = {"configurable": {"thread_id": st.session_state.thread_id}}
-    # print(f"[process_command_input] Before invoke ----")
-    # result = st.session_state.game_graph.game_graph.graph.invoke(
-    #     Command(resume=action, update=current_state),
-    #     config=config
-    # )
-    # print(f"[process_command_input] After invoke ----")
     
     # 更新游戏状态
     # st.session_state.game_agent.update_state(result, game_action)
     # st.session_state.require_update = True
 
+# 核心逻辑代码, 不能任意修改 === 代码开始
 def _process_streaming_agent() -> bool:
 
     # TODO: Agent graph streaming 输出
@@ -361,12 +374,13 @@ def _process_streaming_agent() -> bool:
     if st.session_state.game_started and st.session_state.gui_feedback == "start":
         logger.info("[_process_streaming_agent][chat_view] Starting game workflow")
         game_agent = st.session_state.game_agent
+        init_state = game_agent.init_game_state()
+        # add_system_message("start run game agent....")
         # init agent call
-        st.write("Streaming...")
-        response = st.write_stream(game_agent.run_agent_stream())
-        # game_agent.set_game_state(response)
-        st.session_state.debug = response
-        add_system_message("start game agent")
+        with st.chat_message("assistant"):
+            response = st.write_stream(game_agent.run_agent_stream(init_state))
+
+        st.session_state.debug = game_agent.stream_chunk
         add_assistant_message(response)
         st.session_state.gui_feedback = None
         st.session_state.gui_feedback_params = {}
@@ -389,14 +403,14 @@ def _process_streaming_agent() -> bool:
             )
 
         # 调用 resume_agent 处理反馈
-        # game_agent.resume_agent(command)
-        st.write("Streaming...")
         # Use st.write_stream to display the output as it is generated
-        response = st.write_stream(game_agent.resume_agent_stream(command))
+        with st.chat_message("assistant"):
+            # response = st.write_stream(game_agent.resume_agent_stream(command))
+            response = st.write_stream(game_agent.run_agent_stream(command))
         # if isinstance(response, list):
         #     response = next((item for item in response if item), "")
-        # game_agent.set_game_state(response)
-        st.session_state.debug = response
+
+        st.session_state.debug = game_agent.stream_chunk
         add_assistant_message(response)
 
         # 清除已处理的GUI反馈
@@ -405,9 +419,10 @@ def _process_streaming_agent() -> bool:
         require_update = True
 
     return require_update
+# 核心逻辑代码, 不能任意修改 === 代码结束
 
 # 核心逻辑代码, 不能任意修改 === 代码开始
-async def _process_game_loop():
+def _process_game_loop():
     """处理游戏循环
     
     主要职责:
@@ -427,7 +442,7 @@ async def _process_game_loop():
         st.session_state.processing_state = True
         game_agent = st.session_state.game_agent
 
-        # 处理调用LLM对话生成
+        # 处理调用LLM对话生成 (迁移到chat_view)
         # if st.session_state._user_chat_input:
         #     game_state = st.session_state.game_agent.get_game_state()
         #     response = await st.session_state.llm_interaction.generate_ai_response(
@@ -481,7 +496,7 @@ async def _process_game_loop():
     return require_update
 # 核心逻辑代码, 不能任意修改 === 代码结束
 
-async def main():
+def main():
     """主函数
     
     程序入口点，负责:
@@ -510,28 +525,35 @@ async def main():
     render_sidebar_controls()
 
     # 分割界面为游戏区和聊天区
-    game_col, chat_col = st.columns([1, 1])
-    
-    # 渲染游戏区
-    with game_col:
-        render_game_view()
+    chat_col, game_col  = st.columns([0.8, 1.2])
     
     # 渲染聊天区
     with chat_col:
         if render_chat_view():
-            # 新的对话优先进行刷新
-            # logger.info(f"[main] new userchat input: {st.session_state._user_chat_input} piority rerun {time.time()}")
-            st.session_state.require_update = True
-            # st.rerun()
+            # 新的对话st.session_state.messages优先进行刷新, 检查 require_update_chat
+            if st.session_state.require_update_chat:
+                st.session_state.require_update_chat = False
+                logger.info(f"[main][chat_view] require_update_chat 新的对话更新优先渲染 rerun {datetime.now()}")
+                st.rerun()
+            # 对话状态优先进行刷新, 检查 require_update
+            if st.session_state.require_update:
+                st.session_state.require_update = False
+                logger.info(f"[main][chat_view] require_update 对话状态优先渲染 rerun {datetime.now()}")
+                st.rerun()
 
         # 渲染动作区
         render_action_view()
+
+    # 渲染游戏区
+    with game_col:
+        render_game_view()
     
     # 处理状态更新
-    if await _process_game_loop():
+    if _process_game_loop():
         st.session_state.require_update = False
-        logger.info(f"[main] after _process_game_loop rerun {time.time()}")
+        logger.info(f"[main] post _process_game_loop rerun {datetime.now()}")
         st.rerun()
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    # asyncio.run(main()) 
+    main() 
