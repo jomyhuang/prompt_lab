@@ -188,7 +188,8 @@ class GameAgent:
         self.stream_chunk = []
         self.stream_current_node = None
         
-        # 使用stream_mode="updates" 来获取状态更新, Stream parser    
+        # 使用stream_mode="updates" 来获取状态更新, Stream parser
+        stream_flow = ""    
         for chunk in self.graph.stream(state, config=config, stream_mode="updates"):
             for key, value in chunk.items():
                 print(f"来自节点 '{key}' 的输出:")
@@ -204,10 +205,11 @@ class GameAgent:
                     logger.error(f"Error stream set game state: {str(e)}")
                 # print("\n---")
             yield f" -> {key}"
+            stream_flow += f" -> {key}"
             # 保存整个streaming chunk
             self.stream_chunk.append(chunk)
 
-        self.stream_flow = chunk
+        self.stream_flow = stream_flow
         logger.info(f"finish run_agent_stream after invoke {datetime.now()}")
         return chunk
 
@@ -407,7 +409,8 @@ class GameAgent:
         # 准备游戏信息
         game_info = {
             "valid_actions": state["valid_actions"],
-            "game_data": state["game_data"]
+            "game_data": state["game_data"],
+            "message": AIMessage(content="玩家回合开始")
         }
         state["info"] = "玩家回合开始"
         # st.session_state.messages.append(AIMessage(content="玩家回合开始"))

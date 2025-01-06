@@ -44,7 +44,8 @@ def _init_session_state():
         st.session_state.game_agent = None  # 游戏Agent实例
         st.session_state.streaming = True
         st.session_state.debug = None
-        
+        st.session_state.agent_autogui = False
+
         # 配置日志
         logging.basicConfig(
             level=logging.INFO,
@@ -233,8 +234,11 @@ def render_chat_view():
     with chat_container:
         for message in st.session_state.messages:
             # message 采用langchain规范对话类型: SystemMessage, HumanMessage, AIMessage
-            with st.chat_message(message.type):
-                st.markdown(message.content)
+            if isinstance(message, HumanMessage) or isinstance(message, AIMessage) or isinstance(message, SystemMessage):
+                with st.chat_message(message.type):
+                    st.markdown(message.content)
+            else:
+                st.markdown(message)
 
         
         if st.session_state._user_chat_input is not None and st.session_state._user_chat_input != "":
@@ -381,6 +385,7 @@ def _process_streaming_agent() -> bool:
         return False
 
     require_update = False
+    # st.session_state.agent_autogui = False
     if st.session_state.game_started and st.session_state.gui_feedback == "start":
         logger.info("[_process_streaming_agent][chat_view] Starting game workflow")
         game_agent = st.session_state.game_agent
@@ -394,6 +399,7 @@ def _process_streaming_agent() -> bool:
         add_assistant_message(response)
         st.session_state.gui_feedback = None
         st.session_state.gui_feedback_params = {}
+        st.session_state.agent_autogui = True
         require_update = True
     # 2. Human-in-Loop Feedback 处理    
     if st.session_state.game_started and st.session_state.gui_feedback and st.session_state.gui_feedback != "start":
@@ -422,11 +428,33 @@ def _process_streaming_agent() -> bool:
 
         st.session_state.debug = game_agent.stream_chunk
         add_assistant_message(response)
-
+        st.session_state.agent_autogui = True
         # 清除已处理的GUI反馈
         st.session_state.gui_feedback = None
         st.session_state.gui_feedback_params = {}
         require_update = True
+
+    # 测试agent自动反馈给GUI agent_autogui flag
+    if st.session_state.agent_autogui:
+        game_agent = st.session_state.game_agent
+        game_state = st.session_state.game_agent.get_game_state()
+        st.session_state.agent_autogui = False
+
+        if game_state["current_turn"] == "end_game":
+            add_system_message("run agent is finished")
+            st.session_state.game_started = False
+
+        if game_agent.is_game_interrupt() and not game_agent.interrupt_state is None:
+            # tuple 解包
+            # interrupt_value = game_agent.interrupt_state            #获得一个tuple
+            interrupt_value = game_agent.interrupt_state[0].value     #获得一个dict
+            message = interrupt_value.get("message",None)
+            if not message is None:
+                logger.info(f"[process_game_loop] interrupt game_info: {message}")
+                if isinstance(message, AIMessage):
+                    add_assistant_message(message.content)
+                else:
+                    add_system_message(message)
 
     return require_update
 # 核心逻辑代码, 不能任意修改 === 代码结束
@@ -451,6 +479,7 @@ def _process_game_loop():
     try:
         st.session_state.processing_state = True
         game_agent = st.session_state.game_agent
+        game_state = st.session_state.game_agent.get_game_state()
 
         # 处理调用LLM对话生成 (迁移到chat_view)
         # if st.session_state._user_chat_input:
@@ -462,6 +491,27 @@ def _process_game_loop():
         #     add_assistant_message(response)
         #     st.session_state._user_chat_input = None
         #     require_update = True
+
+        # 测试agent自动反馈给GUI
+        # if st.session_state.agent_autogui:
+        #     game_agent = st.session_state.game_agent
+        #     game_state = st.session_state.game_agent.get_game_state()
+        #     st.session_state.agent_autogui = False
+
+        #     if game_state["current_turn"] == "end":
+        #         add_system_message("游戏已经结束")
+
+        #     if game_agent.is_game_interrupt() and not game_agent.interrupt_state is None:
+        #         # tuple 解包
+        #         # interrupt_value = game_agent.interrupt_state            #获得一个tuple
+        #         interrupt_value = game_agent.interrupt_state[0].value     #获得一个dict
+        #         message = interrupt_value.get("message",None)
+        #         if not message is None:
+        #             logger.info(f"[process_game_loop] interrupt game_info: {message}")
+        #             if isinstance(message, AIMessage):
+        #                 add_assistant_message(message.content)
+        #             else:
+        #                 add_system_message(message)
 
         # 不是streaming模式
         if not st.session_state.streaming: 
