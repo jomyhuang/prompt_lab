@@ -10,6 +10,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 import logging
 from langgraph.types import interrupt, Command
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -98,9 +99,18 @@ def render_sidebar_controls():
         # 显示游戏状态
         game_state = st.session_state.game_agent.get_game_state()
 
+        def _default_handler(obj):
+            return None
+
         if game_state:
             with st.expander("🔍 查看游戏状态", expanded=True):
                 st.json(game_state, expanded=3)
+
+        if not st.session_state.game_agent is None:
+            # 使用__dict__ 来获取所有属性, 使用default_handler 来处理不可序列化属性
+            json_string = json.dumps(st.session_state.game_agent.__dict__ , default=_default_handler)
+            with st.expander("🔍 session_state.game_agent", expanded=True):
+                st.json(json_string, expanded=1)
 
         if not st.session_state.debug is None:
             with st.expander("🔍 session_state.debug", expanded=True):
@@ -257,7 +267,7 @@ def render_chat_view():
     # 渲染对话输入框
     user_input = st.chat_input("输入你的行动或问题...", key="chat_input")
     if user_input:
-        add_user_chat_input(user_input)
+        _add_user_chat_input(user_input)
         st.session_state.require_update_chat = True
 
     return require_update
@@ -327,7 +337,7 @@ def add_assistant_message(message: str):
     st.session_state.require_update_chat = True
     st.session_state.require_update = True
 
-def add_user_chat_input(message: str):
+def _add_user_chat_input(message: str):
     """添加用户聊天输入"""
     st.session_state._user_chat_input = message
     add_user_message(message)
@@ -527,28 +537,28 @@ def main():
     # 分割界面为游戏区和聊天区
     chat_col, game_col  = st.columns([0.8, 1.2])
     
-    # 渲染聊天区
+    # 1. 渲染聊天区
     with chat_col:
         if render_chat_view():
-            # 新的对话st.session_state.messages优先进行刷新, 检查 require_update_chat
+            # 1-1. 新的对话st.session_state.messages优先进行刷新, 检查 require_update_chat
             if st.session_state.require_update_chat:
                 st.session_state.require_update_chat = False
                 logger.info(f"[main][chat_view] require_update_chat 新的对话更新优先渲染 rerun {datetime.now()}")
                 st.rerun()
-            # 对话状态优先进行刷新, 检查 require_update
+            # 1-2. 对话状态优先进行刷新, 检查 require_update
             if st.session_state.require_update:
                 st.session_state.require_update = False
                 logger.info(f"[main][chat_view] require_update 对话状态优先渲染 rerun {datetime.now()}")
                 st.rerun()
 
-        # 渲染动作区
+        # 2. 渲染动作区
         render_action_view()
 
-    # 渲染游戏区
+    # 3. 渲染游戏区
     with game_col:
         render_game_view()
     
-    # 处理状态更新
+    # 4. 处理状态更新
     if _process_game_loop():
         st.session_state.require_update = False
         logger.info(f"[main] post _process_game_loop rerun {datetime.now()}")

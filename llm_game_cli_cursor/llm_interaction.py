@@ -160,18 +160,21 @@ class LLMInteraction:
         """
 
         # 准备上下文
-        # 准备上下文
         # print(f"[generate_ai_response] game_state:", game_state)
         # BUG FIX: TypeError: Object of type HumanMessage is not JSON serializable
         # JSON 序列化失败, 有可能是 HumanMessage 类型的问题
-        try:
-            game_state_input = json.dumps(game_state, ensure_ascii=False, indent=2)
-        except:
-            logger.error(f"[generate_ai_response_stream] game_state_input json.dumps error: {game_state}")
-            game_state_input = ""
+        # try:
+        #     game_state_input = json.dumps(game_state, ensure_ascii=False, indent=2)
+        # except:
+        #     logger.error(f"[generate_ai_response_stream] game_state_input json.dumps error: {game_state}")
+        #     game_state_input = ""
+
+        # TODO: 筛选game_state, 减少token、减少messages对话次数, 还有隐藏的游戏信息不要给LLM
 
         context = {
-            "game_state": game_state_input,
+            # 直接传入state,或是messages. 不需要使用json.dump (不需要解析)
+            # "game_state": game_state["messages"],
+            "game_state": game_state,
             "chat_history": self.format_history(),
             "user_input": user_input
         }

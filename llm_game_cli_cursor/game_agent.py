@@ -74,6 +74,7 @@ class GameAgent:
         self.interrupt_state = None
         self.stream_chunk = []
         self.stream_flow = None
+        self.stream_current_node = None
        
     def init_game_state(self) -> GameState:
         """初始化游戏状态"""
@@ -141,7 +142,6 @@ class GameAgent:
             logger.error(f"Failed to build graph: {str(e)}")
             raise RuntimeError(f"Graph build failed: {str(e)}")
 
-   
     def run_agent(self, state: GameState=None, config: dict=None) -> GameState:
         if state is None:
             state = self.get_game_state()
@@ -155,24 +155,25 @@ class GameAgent:
         self.stream_chunk = None
         new_state = self.graph.invoke(state, config=config)
         self.set_game_state(new_state)
+        self.stream_chunk = new_state
         logger.info("run_agent after invoke")
         return new_state
 
-    def resume_agent(self, command: Command=None, config: dict=None) -> GameState:
-        if command is None:
-            command = Command(resume="resume")
+    # def resume_agent(self, command: Command=None, config: dict=None) -> GameState:
+    #     if command is None:
+    #         command = Command(resume="resume")
 
-        if config is None:
-            config = {"configurable": {"thread_id": self.thread_id}}
+    #     if config is None:
+    #         config = {"configurable": {"thread_id": self.thread_id}}
 
-        logger.info("resume_agent before invoke")
-        # 中断状态清空
-        self.interrupt_state = None
-        self.stream_chunk = None
-        new_state = self.graph.invoke(command, config=config)
-        self.set_game_state(new_state)
-        logger.info("resume_agent after invoke")
-        return new_state
+    #     logger.info("resume_agent before invoke")
+    #     # 中断状态清空
+    #     self.interrupt_state = None
+    #     self.stream_chunk = None
+    #     new_state = self.graph.invoke(command, config=config)
+    #     self.set_game_state(new_state)
+    #     logger.info("resume_agent after invoke")
+    #     return new_state
 
     def run_agent_stream(self, state: GameState=None, config: dict=None):
         if state is None:
@@ -185,10 +186,9 @@ class GameAgent:
         # 中断状态清空
         self.interrupt_state = None
         self.stream_chunk = []
-
-        nodes_flow = "Streaming..."
-        yield nodes_flow
-
+        self.stream_current_node = None
+        
+        # 使用stream_mode="updates" 来获取状态更新, Stream parser    
         for chunk in self.graph.stream(state, config=config, stream_mode="updates"):
             for key, value in chunk.items():
                 print(f"来自节点 '{key}' 的输出:")
@@ -196,17 +196,18 @@ class GameAgent:
                 # print(value)
                 try:
                     if not key == "__interrupt__":
+                        self.stream_current_node = key
                         self.set_game_state(value)
                     else:
                         self.set_game_interrupt(value)
                 except Exception as e:
                     logger.error(f"Error stream set game state: {str(e)}")
                 # print("\n---")
-            nodes_flow += f" -> {key}"
             yield f" -> {key}"
+            # 保存整个streaming chunk
             self.stream_chunk.append(chunk)
 
-        self.stream_flow = nodes_flow
+        self.stream_flow = chunk
         logger.info(f"finish run_agent_stream after invoke {datetime.now()}")
         return chunk
 
