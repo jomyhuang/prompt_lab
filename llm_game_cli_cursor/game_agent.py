@@ -26,6 +26,7 @@ class GameState(TypedDict):
     - 错误处理: error, info
     """
     game_started: bool          # 游戏是否开始
+    # messages: list        # 对话历史记录
     messages: Annotated[list, add_messages]        # 对话历史记录
     current_turn: str           # 当前回合玩家
     game_over: bool            # 游戏是否结束 
@@ -191,10 +192,11 @@ class GameAgent:
         # 使用stream_mode="updates" 来获取状态更新, Stream parser
         stream_flow = ""    
         for chunk in self.graph.stream(state, config=config, stream_mode="updates"):
+        # for chunk in self.graph.stream(state, config=config, stream_mode="values"):
             for key, value in chunk.items():
                 print(f"来自节点 '{key}' 的输出:")
                 print("---")
-                # print(value)
+                print(value)
                 try:
                     if not key == "__interrupt__":
                         self.stream_current_node = key
@@ -203,7 +205,7 @@ class GameAgent:
                         self.set_game_interrupt(value)
                 except Exception as e:
                     logger.error(f"Error stream set game state: {str(e)}")
-                # print("\n---")
+                print("\n---")
             yield f" -> {key}"
             stream_flow += f" -> {key}"
             # 保存整个streaming chunk
@@ -280,7 +282,7 @@ class GameAgent:
     def set_game_interrupt(self, state: GameState):
         """设置当前游戏Human-in-Loop中断状态"""
         self.interrupt_state = state
-        print("set_game_interrupt: new value", self.interrupt_state)
+        # print("set_game_interrupt: new value", self.interrupt_state)
         logger.info("set_game_interrupt: new value")
 
     def is_game_interrupt(self):
@@ -312,6 +314,9 @@ class GameAgent:
             state["valid_actions"] = ["start"]
             state["current_turn"] = "start"
 
+        state["messages"]= AIMessage(content=f"_init_state {datetime.now()}")
+        # state["messages"] = add_messages(state["messages"], [AIMessage(content=f"_init_state {datetime.now()}")])
+
         return state
     
     def _welcome_state(self, state: GameState) -> GameState:
@@ -331,7 +336,10 @@ class GameAgent:
         # action = interrupt("interrupt from welcome")
         # print("[welcome_state] After interrupt ----", action)
         # state["last_action"] = action
-        
+
+        state["messages"]= AIMessage(content=f"_welcome_state {datetime.now()}")
+        # add_messages(state["messages"], [AIMessage(content=f"_welcome_state {datetime.now()}")])
+
         return state
     
     def _route_state(self, state: GameState) -> GameState:
@@ -368,7 +376,8 @@ class GameAgent:
             state["valid_actions"] = []
             state["info"] = f"unknown route {state['current_turn']}"
 
-        state["messages"]= f"_route_state {datetime.now()}"
+        state["messages"]= [AIMessage(content=f"_route_state {datetime.now()}")]
+        # add_messages(state["messages"], [AIMessage(content=f"_route_state {datetime.now()}")])
             
         return state
     
@@ -431,7 +440,8 @@ class GameAgent:
         else:
             state["info"] = f"未知操作: {action}"
 
-        state["messages"]= f"_player_turn {datetime.now()}"
+        state["messages"]= [AIMessage(content=f"_player_turn {datetime.now()}")]
+        # add_messages(state["messages"], [AIMessage(content=f"_player_turn {datetime.now()}")])
                 
         return state
     
@@ -463,6 +473,9 @@ class GameAgent:
         # state["last_action"] = action
         
         st.session_state.messages.append(AIMessage(content="AI行动"))
+        # BUGFIX: (可能为streaming) 如果空下没有Message处理, 这里就会出来message很多的错误
+        state["messages"]= [AIMessage(content=f"_ai_turn {datetime.now()}")]
+        # add_messages(state["messages"], [AIMessage(content=f"_ai_turn {datetime.now()}")])
 
         # 回合结束
         state["current_turn"] = "player"
@@ -482,6 +495,9 @@ class GameAgent:
         print("[end_game] 进入游戏结束节点")
         st.session_state.messages.append(AIMessage(content="游戏结束"))
 
+        # BUGFIX: (可能为streaming) 如果空下没有Message处理, 这里就会出来message很多的错误
+        state["messages"]= [AIMessage(content=f"_end_game {datetime.now()}")]   
+        # add_messages(state["messages"], [AIMessage(content=f"_end_game {datetime.now()}")])
         state["current_turn"] = "end_game"
         state["info"] = "游戏结束"
         state["game_over"] = True
