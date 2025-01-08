@@ -102,6 +102,11 @@ def render_sidebar_controls():
         game_state = st.session_state.game_agent.get_game_state()
 
         def _default_handler(obj):
+            try:
+                return obj[0].value
+            except:
+                # print("json obj error:", obj)
+                pass
             return None
 
         if game_state:
@@ -451,11 +456,11 @@ def _process_streaming_agent() -> bool:
 
         if game_agent.is_game_interrupt() and not game_agent.interrupt_state is None:
             # tuple 解包
-            # interrupt_value = game_agent.interrupt_state            #获得一个tuple
-            interrupt_value = game_agent.interrupt_state[0].value     #获得一个dict
-            message = interrupt_value.get("message",None)
+            # # interrupt_value = game_agent.interrupt_state            #获得一个tuple
+            # interrupt_value = game_agent.interrupt_state[0].value     #获得一个dict
+            message = game_agent.interrupt_state.get("message",None)
             if not message is None:
-                logger.info(f"[process_game_loop] interrupt game_info: {message}")
+                # logger.info(f"[process_game_loop] interrupt game_info: {message}")
                 if isinstance(message, AIMessage):
                     add_assistant_message(message.content)
                 else:
