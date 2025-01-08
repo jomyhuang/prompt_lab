@@ -19,10 +19,24 @@ https://docs.streamlit.io/develop/tutorials/llms/build-conversational-apps
     - require_update
 
 
+##topic:
+GUI-LangGraph Agent的框架关系处理
+messages 的更新
+在AI turn过程中,如果更新message,跟HIL
+
+route处理turn switch, 还是需要一个end_turn node
+tool 放在node在哪里(理论上在route)?
+
+
+
 
 ## todo:
 
 测试messages: Annotated[list, add_messages]
+BUG issue:
+
+
+
 
 
 [ ]- 测试 Tool node

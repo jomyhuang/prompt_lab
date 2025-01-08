@@ -5,6 +5,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import interrupt, Command
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph.message import add_messages
+from agent_tool import add_system_message, add_user_message, add_assistant_message
 from dataclasses import dataclass
 from datetime import datetime
 import logging
@@ -150,6 +151,9 @@ class GameAgent:
         if config is None:
             config = {"configurable": {"thread_id": self.thread_id}}
 
+        if isinstance(state, str):
+            state = Command(resume="resume")
+
         logger.info("run_agent before invoke")
         # 中断状态清空
         self.interrupt_state = None
@@ -183,6 +187,9 @@ class GameAgent:
         if config is None:
             config = {"configurable": {"thread_id": self.thread_id}}
 
+        if isinstance(state, str):
+            state = Command(resume="resume")
+
         logger.info("run_agent_stream before invoke")
         # 中断状态清空
         self.interrupt_state = None
@@ -215,30 +222,11 @@ class GameAgent:
         logger.info(f"finish run_agent_stream after invoke {datetime.now()}")
         return chunk
 
-    # def resume_agent_stream(self, command: Command=None, config: dict=None):
-    #     if command is None:
-    #         command = Command(resume="resume")
-
-    #     if config is None:
-    #         config = {"configurable": {"thread_id": self.thread_id}}
-
-    #     logger.info("resume_agent_stream before invoke")
-    #     # for chunk in self.graph.stream(command, config=config, stream_mode="values"):
-    #     for chunk in self.graph.stream(command, config=config, stream_mode="updates"):
-    #         for key, value in chunk.items():
-    #             print(f"来自节点 '{key}' 的输出:")
-    #             print("---")
-    #             print(value)
-    #             print("\n---")
-    #         yield chunk
-
-    #     # response = self.graph.stream(command, config=config)
-    #     # for chunk in response:
-    #     #     yield chunk
-    #     # self.set_game_state(response)
-    #     logger.info("resume_agent_stream after invoke")
-    #     return chunk
-
+    def _run_agent_interrupt(self, info: Any = None):
+        """运行游戏中断"""
+        if not st.session_state.streaming:
+            self.set_game_interrupt(info)
+            logger.info("run_agent_interrupt: under invoke mode set game interrupt manually")
 
     def validate_state(self, state: GameState) -> bool:
         """验证游戏状态的有效性"""
@@ -279,9 +267,13 @@ class GameAgent:
             self.game_state = state
             logger.info("game_state set: new value")
 
-    def set_game_interrupt(self, state: GameState):
+    def set_game_interrupt(self, info: Any = None):
         """设置当前游戏Human-in-Loop中断状态"""
-        self.interrupt_state = state
+        ### 解包tuple
+        if isinstance(info, tuple):
+            self.interrupt_state = info[0].value
+        else:
+            self.interrupt_state = info
         # print("set_game_interrupt: new value", self.interrupt_state)
         logger.info("set_game_interrupt: new value")
 
@@ -426,6 +418,8 @@ class GameAgent:
 
         # 使用interrupt等待玩家操作
         print("[player_turn] Before interrupt ----")
+        # 非streamm模式下,将game_info作为interrupt的参数
+        self._run_agent_interrupt(game_info)
         action = interrupt(game_info)
         print("[player_turn] After interrupt ----", action)
         state["last_action"] = action
@@ -472,7 +466,7 @@ class GameAgent:
         # print("[ai_turn] After interrupt ----", action)
         # state["last_action"] = action
         
-        st.session_state.messages.append(AIMessage(content="AI行动"))
+        add_assistant_message("AI行动")
         # BUGFIX: (可能为streaming) 如果空下没有Message处理, 这里就会出来message很多的错误
         state["messages"]= [AIMessage(content=f"_ai_turn {datetime.now()}")]
         # add_messages(state["messages"], [AIMessage(content=f"_ai_turn {datetime.now()}")])
@@ -493,11 +487,10 @@ class GameAgent:
             GameState: 更新后的状态
         """
         print("[end_game] 进入游戏结束节点")
-        st.session_state.messages.append(AIMessage(content="游戏结束"))
+        add_assistant_message("游戏结束")
 
         # BUGFIX: (可能为streaming) 如果空下没有Message处理, 这里就会出来message很多的错误
         state["messages"]= [AIMessage(content=f"_end_game {datetime.now()}")]   
-        # add_messages(state["messages"], [AIMessage(content=f"_end_game {datetime.now()}")])
         state["current_turn"] = "end_game"
         state["info"] = "游戏结束"
         state["game_over"] = True
