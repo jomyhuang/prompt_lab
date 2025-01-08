@@ -10,3 +10,4 @@ test_logs/
 simple01/saves/
 saves/
 save_com/
+.venv/
