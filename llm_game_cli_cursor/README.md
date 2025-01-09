@@ -1,167 +1,159 @@
-# LLM游戏框架
+# LLM Game Framework
 
-基于LangGraph和Streamlit构建的LLM驱动的游戏框架，支持人机交互的回合制游戏开发。
-
-## 技术栈
-
-- **LangGraph**: 状态管理和工作流控制
-- **Streamlit**: 用户界面框架
-- **LangChain**: LLM交互和链式调用
-- **Python 3.9+**: 开发语言
-
-## 主要特性
-
-- 基于LangGraph的游戏状态管理
-- 支持多种LLM模型接入（OpenAI、Google、DeepSeek等）
-- 标准化的Streamlit组件界面
-- 回合制游戏流程控制
-- 实时对话交互系统
-- 通过对话messages输出游戏节点名称
-- 在玩家回合使用对话命令与LLM对话交互
-- 按钮控制玩家回合结束，自动进入AI回合
-- AI回合自动生成响应并更新游戏状态
-
-## 安装说明
-
-1. 克隆仓库:
-```bash
-git clone <repository_url>
-cd llm_game_cli_cursor
-```
-
-2. 安装依赖:
-```bash
-pip install -r requirements.txt
-```
-
-3. 环境配置:
-创建`.env`文件并配置以下变量:
-```
-OPENAI_API_KEY=your_openai_api_key
-OPENAI_API_BASE=your_openai_api_base
-GOOGLE_API_KEY=your_google_api_key
-DEEPSEEK_API_KEY=your_deepseek_api_key
-DEEPSEEK_API_BASE=your_deepseek_api_base
-```
+基于 LangGraph 和 Streamlit 构建的 LLM 游戏框架。
 
 ## 项目结构
 
 ```
 llm_game_cli_cursor/
-├── main.py           # 主程序入口和GUI实现
-├── game_agent.py     # LangGraph游戏流程和状态管理
-├── llm_interaction.py # LLM交互和对话管理
-├── requirements.txt  # 项目依赖
-├── README.md         # 项目文档
-├── tdd_cli.md        # 技术设计文档
-├── todo.md           # 待办事项
-└── .env              # 环境变量配置
+├── main.py              # 主程序入口和框架核心
+├── game_agent.py        # LangGraph游戏状态管理
+├── llm_interaction.py   # LLM模型交互管理
+├── agent_tool.py        # 消息处理工具函数
+└── games/              # 游戏界面组件目录
+    └── base_game/      # 基础游戏界面
+        ├── __init__.py
+        ├── game_view.py    # 游戏状态显示
+        └── action_view.py  # 玩家操作界面
 ```
 
-## 核心功能模块
+## 核心模块说明
 
-### 1. 游戏状态管理 (game_agent.py)
-- LangGraph工作流定义
-- 游戏状态转换逻辑
-- 回合制流程控制
-- 状态验证和异常处理
-- 状态持久化支持
+### 1. 框架核心 (main.py)
 
-### 2. LLM交互 (llm_interaction.py)
-- 多模型支持（OpenAI、Google、DeepSeek）
-- 对话上下文管理
-- 命令解析和执行
-- 实时响应生成
-- 多轮对话支持
+主要职责:
+- 会话状态管理 (`_init_session_state`)
+- 游戏Agent初始化 (`_init_game_agent`)
+- 聊天界面渲染 (`render_chat_view`)
+- 游戏循环处理 (`_process_game_loop`)
+- Human-in-Loop 交互流程
 
-### 3. 用户界面 (main.py)
-- 游戏状态显示
-- 聊天界面
-- 操作控制面板
-- 实时状态更新
-- 响应式布局
+关键组件:
+- 状态更新机制 (require_update/require_update_chat)
+- 消息流处理 (streaming/invoke 模式)
+- 界面布局管理
 
-## 代码质量与改进建议
+### 2. 状态管理 (game_agent.py)
 
-### 1. 状态管理改进
-- 增强状态验证逻辑，覆盖更多状态字段
-- 完善异常处理机制，特别是状态转换时的错误处理
-- 增加详细的日志记录，特别是关键操作和状态变更
-- 考虑实现状态回滚机制，提高系统容错性
+基于 LangGraph 的状态图实现:
+- 游戏状态定义 (`GameState`)
+- 状态转换节点
+  - init -> welcome -> route
+  - player_turn/ai_turn -> route
+  - route -> end
+- Human-in-Loop 中断机制
+- 状态验证和更新
 
-### 2. AI决策优化
-- 增强AI决策逻辑，增加策略性
-- 实现多级AI难度选择
-- 增加AI学习机制，根据玩家行为调整策略
-- 优化AI响应生成，提高交互自然度
+### 3. LLM交互 (llm_interaction.py)
 
-### 3. 性能优化
-- 优化状态更新频率，减少不必要的更新
-- 实现状态缓存机制，提高响应速度
-- 优化LLM调用频率，减少API调用开销
-- 实现异步状态更新，提高系统响应性
+LLM模型管理:
+- 支持多种模型 (Google/OpenAI/DeepSeek)
+- 对话历史管理
+- 流式输出支持
+- 上下文提示词模板
 
-### 4. 可扩展性改进
-- 模块化设计，便于添加新游戏规则
-- 实现插件机制，支持功能扩展
-- 完善API接口，支持外部系统集成
-- 增加配置管理，支持灵活调整系统参数
+### 4. 界面组件 (games/base_game)
+
+可扩展的游戏界面:
+- 游戏状态显示 (game_view.py)
+- 玩家操作界面 (action_view.py)
+- 支持自定义游戏类型
+
+## 工作流程
+
+1. 初始化流程:
+```
+main.py
+  ├── _init_session_state  # 初始化会话状态
+  └── _init_game_agent     # 创建游戏Agent
+```
+
+2. 游戏循环:
+```
+_process_game_loop
+  ├── streaming模式: _process_streaming_agent
+  └── invoke模式: _process_invoke_agent
+```
+
+3. 状态更新机制:
+```
+require_update_chat (新对话优先)
+  └── require_update (状态更新)
+      └── rerun (界面刷新)
+```
+
+4. Human-in-Loop 交互:
+```
+player_turn
+  ├── interrupt -> GUI操作
+  └── resume -> 状态更新
+```
+
+## 特点和优势
+
+1. 模块化设计
+- 核心框架与游戏逻辑分离
+- 界面组件可扩展
+- 消息处理统一管理
+
+2. 双模式支持
+- Streaming: 实时流式输出
+- Invoke: 标准调用模式
+
+3. 状态管理
+- 基于 LangGraph 的状态图
+- 完整的状态验证
+- 灵活的中断机制
+
+4. 界面交互
+- 标准化的 Streamlit 组件
+- 响应式更新机制
+- 清晰的状态反馈
 
 ## 开发指南
 
-### 状态管理
-- 使用`GameAgent`类管理游戏状态
-- 实现状态验证和转换
-- 处理异常情况
-- 维护状态一致性
+1. 添加新游戏类型:
+```python
+games/
+  ├── base_game/     # 基础游戏
+  ├── card_game/     # 卡牌游戏
+  └── chess_game/    # 棋类游戏
+```
 
-### LLM交互
-- 配置模型参数
-- 实现对话管理
-- 处理API限制
-- 优化响应生成
+2. 自定义界面组件:
+- 继承基础游戏视图
+- 实现特定游戏逻辑
+- 保持状态管理接口
 
-### 界面开发
-- 使用Streamlit标准组件
-- 实现响应式更新
-- 优化用户体验
-- 确保界面一致性
+3. 注意事项:
+- 保持核心框架代码稳定
+- 遵循状态更新机制
+- 正确处理中断流程
 
-## 注意事项
+## 依赖要求
 
-1. **API密钥管理**
-   - 妥善保管API密钥
-   - 使用环境变量配置
-   - 注意API使用限制
+- Python 3.10+
+- streamlit
+- langchain
+- langgraph
+- 其他依赖见 requirements.txt
 
-2. **状态同步**
-   - 保持状态一致性
-   - 正确处理状态更新
-   - 避免并发问题
+## 使用说明
 
-3. **性能优化**
-   - 控制API调用频率
-   - 优化状态更新逻辑
-   - 合理使用缓存机制
+1. 安装依赖:
+```bash
+pip install -r requirements.txt
+```
 
-## 已知问题与解决方案
+2. 配置环境变量:
+```bash
+# LLM API配置
+OPENAI_API_KEY=xxx
+GOOGLE_API_KEY=xxx
+DEEPSEEK_API_KEY=xxx
+```
 
-### 1. 状态验证不全面
-- **问题描述**: 当前状态验证仅检查current_turn和valid_actions字段
-- **解决方案**: 扩展validate_state方法，增加对其他关键字段的验证
-
-### 2. 异常处理不完善
-- **问题描述**: 部分关键操作缺少异常处理
-- **解决方案**: 在关键操作（如状态转换、LLM调用）中添加try-catch块
-
-### 3. 日志记录不足
-- **问题描述**: 日志信息不够详细，难以追踪问题
-- **解决方案**: 增加关键操作的日志记录，包括参数和返回值
-
-### 4. 代码结构优化
-- **问题描述**: 部分方法过于冗长，可读性差
-- **解决方案**: 将长方法拆分为多个小方法，提高代码可维护性
-
-### 5. 性能瓶颈
-- **问题描述**: LLM调用频率较高，可能影响性能
-- **解决方案**: 实现响应缓存机制，减少重复调用
+3. 运行程序:
+```bash
+streamlit run main.py
+```

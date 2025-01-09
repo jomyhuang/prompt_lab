@@ -10,11 +10,5 @@ Always respond in 中文, 务必使用UTF-8中文编码文件
 6. 请直接修改要求的错误代码,但不要浪费时间重构除问题以外的代码
 
 
-# 参考最新API文件:
-streamlit API
-https://docs.streamlit.io
-https://docs.streamlit.io/develop/api-reference
 
-langchain api
-https://python.langchain.com/api_reference/
 

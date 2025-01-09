@@ -166,7 +166,6 @@ class GameAgent:
         new_state = self.graph.invoke(state, config=config)
         self.set_game_state(new_state)
         self.stream_chunk = new_state
-        print("run_agent new_state", new_state)
         logger.info("run_agent after invoke")
         return new_state
 
@@ -202,10 +201,7 @@ class GameAgent:
                 try:
                     if not key == "__interrupt__":
                         self.stream_current_node = key
-                        # 基本使用的方式
-                        # self.game_state.update(value)
-                        # 使用Annotated类型的方式
-                        self.set_game_state_from_stream(value)  
+                        self.set_game_state(value)
                     else:
                         self.set_game_interrupt(value)
                 except Exception as e:
@@ -248,31 +244,6 @@ class GameAgent:
             self.game_state = state
             logger.info("game_state set: new value")
 
-    def set_game_state_from_stream(self, state: GameState):
-        """设置当前游戏状态(从stream中获取)
-        
-        支持:
-        1. 普通dict使用update方式更新
-        2. Annotated类型使用对应的reducer更新
-        """
-        try:
-            for key, value in state.items():
-                # 从GameState类定义获取字段类型
-                field_type = GameState.__annotations__.get(key, None)
-                if hasattr(field_type, "__metadata__") and field_type.__metadata__:
-                    # 使用reducer更新Annotated字段
-                    reducer = field_type.__metadata__[0]
-                    current_value = self.game_state.get(key, [])
-                    self.game_state[key] = reducer(current_value, value)
-                else:
-                    # 普通字段直接更新
-                    self.game_state[key] = value
-                    
-            logger.info("game_state set from stream: updated successfully")
-        except Exception as e:
-            logger.error(f"Failed to update game state from stream: {str(e)}")
-            raise
-
     def set_game_interrupt(self, info: Any = None):
         """设置当前游戏Human-in-Loop中断状态"""
         if info is None:
@@ -290,56 +261,92 @@ class GameAgent:
         """判断当前游戏是否处于Human-in-Loop中断状态"""
         return self.interrupt_state is not None
 
-    def _init_state(self, state: GameState) -> Dict:
-        """初始化游戏状态节点"""
+    def _init_state(self, state: GameState) -> GameState:
+        """初始化游戏状态节点
+        
+        处理新游戏的初始化:
+        - 设置游戏开始标志
+        - 初始化游戏阶段
+        - 设置初始可用动作
+        - 设置初始玩家回合
+        
+        Args:
+            state: 初始状态
+            
+        Returns:
+            GameState: 初始化后的状态
+        """
         print("[init_state] 进入初始化节点")
         
-        updates = {}
+        # 如果是新游戏，设置初始状态
         if not state["game_started"]:
-            updates.update({
-                "game_started": True,
-                "phase": "init phase",
-                "info": "游戏开始！请选择你的行动。",
-                "valid_actions": ["start"],
-                "current_turn": "start"
-            })
+            state["game_started"] = True
+            state["phase"] = "init phase"
+            state["info"] = "游戏开始！请选择你的行动。"
+            state["valid_actions"] = ["start"]
+            state["current_turn"] = "start"
 
-        updates["messages"] = AIMessage(content=f"_init_state {datetime.now()}")
-        return updates
+        state["messages"]= AIMessage(content=f"_init_state {datetime.now()}")
+        # state["messages"] = add_messages(state["messages"], [AIMessage(content=f"_init_state {datetime.now()}")])
+
+        return state
     
-    def _welcome_state(self, state: GameState) -> Dict:
-        """欢迎状态节点"""
-        print("[welcome_state] 进入欢迎状态节点")
-        return {
-            "messages": AIMessage(content=f"_welcome_state {datetime.now()}")
-        }
-    
-    def _route_state(self, state: GameState) -> Dict:
-        """路由状态节点"""
-        print("[route_state] 进入路由节点")
+    def _welcome_state(self, state: GameState) -> GameState:
+        """欢迎状态节点
         
-        updates = {}
+        显示欢迎信息并等待用户操作
+        使用interrupt等待UI交互
+        
+        Args:
+            state: 当前状态
+            
+        Returns:
+            GameState: 更新后的状态
+        """
+        print("[welcome_state] 进入欢迎状态节点")
+        # print("[welcome_state] Before interrupt ----")
+        # action = interrupt("interrupt from welcome")
+        # print("[welcome_state] After interrupt ----", action)
+        # state["last_action"] = action
+
+        state["messages"]= AIMessage(content=f"_welcome_state {datetime.now()}")
+        # add_messages(state["messages"], [AIMessage(content=f"_welcome_state {datetime.now()}")])
+
+        return state
+    
+    def _route_state(self, state: GameState) -> GameState:
+        """路由状态节点
+        
+        根据当前状态决定下一步流程:
+        - 更新可用动作
+        - 设置回合信息
+        - 准备下一个节点
+        
+        Args:
+            state: 当前状态
+            
+        Returns:
+            GameState: 路由后的状态
+        """
+        print("[route_state] 进入路由节点")
+
         if state["current_turn"] == "start":
-            updates["current_turn"] = "player"
+            state["current_turn"] = "player"
 
-        if state["current_turn"] == "player" or state["current_turn"] == "start":
-            updates.update({
-                "valid_actions": ["play", "end_turn", "game_over"],
-                "info": "请选择行动"
-            })
+        if state["current_turn"] == "player":
+            state["valid_actions"] = ["play", "end_turn", "game_over"]
+            state["info"] = "请选择行动"
         elif state["current_turn"] == "ai":
-            updates.update({
-                "valid_actions": [],
-                "info": "AI回合..."
-            })
+            state["valid_actions"] = []
+            state["info"] = "AI回合..."
         else:
-            updates.update({
-                "valid_actions": [],
-                "info": f"unknown route current_turn {state['current_turn']}"
-            })
+            state["valid_actions"] = []
+            state["info"] = f"unknown route {state['current_turn']}"
 
-        updates["messages"] = [AIMessage(content=f"_route_state {datetime.now()}")]
-        return updates
+        state["messages"]= [AIMessage(content=f"_route_state {datetime.now()}")]
+        # add_messages(state["messages"], [AIMessage(content=f"_route_state {datetime.now()}")])
+            
+        return state
     
     def _route_condition(self, state: GameState) -> str:
         """路由条件判断
@@ -359,59 +366,104 @@ class GameAgent:
         else:
             return "ai"
     
-    def _player_turn(self, state: GameState) -> Dict:
-        """玩家回合处理"""
-        print("[player_turn] 进入玩家回合节点")
+    def _player_turn(self, state: GameState) -> GameState:
+        """玩家回合处理
         
+        Args:
+            state: 当前状态
+            
+        Returns:
+            GameState: 更新后的状态
+        """
+        print("[player_turn] 进入玩家回合节点")
+        # if state["current_turn"] != "player" or state["game_over"]:
+        #     return state
+            
+        # 准备游戏信息
         game_info = {
             "valid_actions": state["valid_actions"],
             "game_data": state["game_data"],
             "message": AIMessage(content="玩家回合开始")
         }
-        
-        updates = {"info": "玩家回合开始"}
-        
+        state["info"] = "玩家回合开始"
+        # st.session_state.messages.append(AIMessage(content="玩家回合开始"))
+
+        # 使用interrupt等待玩家操作
         print("[player_turn] Before interrupt ----")
+        # 非streamm模式下,将game_info作为interrupt的参数
         self._run_agent_interrupt(game_info)
         action = interrupt(game_info)
         print("[player_turn] After interrupt ----", action)
-        updates["last_action"] = action
+        state["last_action"] = action
         
+        # 处理玩家操作
         if action == "end_turn":
-            updates.update({
-                "current_turn": "ai",
-                "info": "回合结束"
-            })
+            state["current_turn"] = "ai"
+            state["info"] = "回合结束"
         elif action == "game_over":
-            updates.update({
-                "game_over": True,
-                "info": "游戏结束"
-            })
+            state["game_over"] = True
+            state["info"] = "游戏结束"
         else:
-            updates["info"] = f"未知操作: {action}"
+            state["info"] = f"未知操作: {action}"
 
-        updates["messages"] = [AIMessage(content=f"_player_turn {datetime.now()}")]
-        return updates
+        state["messages"]= [AIMessage(content=f"_player_turn {datetime.now()}")]
+        # add_messages(state["messages"], [AIMessage(content=f"_player_turn {datetime.now()}")])
+                
+        return state
     
-    def _ai_turn(self, state: GameState) -> Dict:
-        """AI回合处理"""
+    def _ai_turn(self, state: GameState) -> GameState:
+        """AI回合处理
+        
+        Args:
+            state: 当前状态
+            
+        Returns:
+            GameState: 更新后的状态
+        """
         print("[ai_turn] 进入AI回合节点")
+        # if state["current_turn"] != "ai" or state["game_over"]:
+        #     return state
+        state["info"] = "AI回合开始"
+
+        # 准备游戏信息
+        game_info = {
+            "valid_actions": state["valid_actions"],
+            "game_data": state["game_data"]
+        }
+
+        # # AI决策逻辑
+        # # TODO: 实现具体的AI决策
+        # print("[ai_turn] Before interrupt ----")
+        # action = interrupt(game_info)
+        # print("[ai_turn] After interrupt ----", action)
+        # state["last_action"] = action
         
         add_assistant_message("AI行动")
-        return {
-            "info": "AI回合结束",
-            "current_turn": "player",
-            "messages": [AIMessage(content=f"_ai_turn {datetime.now()}")]
-        }
+        # BUGFIX: (可能为streaming) 如果空下没有Message处理, 这里就会出来message很多的错误
+        state["messages"]= [AIMessage(content=f"_ai_turn {datetime.now()}")]
+        # add_messages(state["messages"], [AIMessage(content=f"_ai_turn {datetime.now()}")])
+
+        # 回合结束
+        state["current_turn"] = "player"
+        state["info"] = "AI回合结束"
+
+        return state
     
-    def _end_game(self, state: GameState) -> Dict:
-        """处理游戏结束"""
+    def _end_game(self, state: GameState) -> GameState:
+        """处理游戏结束
+        
+        Args:
+            state: 当前状态
+            
+        Returns:
+            GameState: 更新后的状态
+        """
         print("[end_game] 进入游戏结束节点")
         add_assistant_message("游戏结束")
-        
-        return {
-            "messages": [AIMessage(content=f"_end_game {datetime.now()}")],
-            "current_turn": "end_game",
-            "info": "游戏结束",
-            "game_over": True
-        } 
+
+        # BUGFIX: (可能为streaming) 如果空下没有Message处理, 这里就会出来message很多的错误
+        state["messages"]= [AIMessage(content=f"_end_game {datetime.now()}")]   
+        state["current_turn"] = "end_game"
+        state["info"] = "游戏结束"
+        state["game_over"] = True
+        return state 
