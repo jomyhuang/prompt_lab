@@ -37,7 +37,7 @@ class GameState(TypedDict):
     valid_actions: List[str]   # 当前可用动作
     thread_id: str             # 会话ID
     error: Optional[str]       # 错误信息
-    info: Optional[str]      # 消息提示
+    info: Optional[str]        # 消息提示
 
 @dataclass 
 class GameAction:
@@ -112,6 +112,7 @@ class GameAgent:
             graph_builder.add_node("init", self._init_state)
             graph_builder.add_node("welcome", self._welcome_state)
             graph_builder.add_node("route", self._route_state)
+            graph_builder.add_node("chat", self._chat_state)
             graph_builder.add_node("player_turn", self._player_turn)
             graph_builder.add_node("ai_turn", self._ai_turn)
             graph_builder.add_node("end", self._end_game)
@@ -127,11 +128,13 @@ class GameAgent:
                 {
                     "player": "player_turn",
                     "ai": "ai_turn",
+                    "chat": "chat",
                     "end": "end"
                 }
             )
             graph_builder.add_edge("player_turn", "route")
             graph_builder.add_edge("ai_turn", "route")
+            graph_builder.add_edge("chat", "route")
             graph_builder.add_edge("end", END)
 
             if not self.checkpointer:
@@ -166,7 +169,7 @@ class GameAgent:
         new_state = self.graph.invoke(state, config=config)
         self.set_game_state(new_state)
         self.stream_chunk = new_state
-        print("run_agent new_state", new_state)
+        # print("run_agent new_state", new_state)
         logger.info("run_agent after invoke")
         return new_state
 
@@ -213,7 +216,7 @@ class GameAgent:
                 print("\n---")
             yield f" -> {key}"
             stream_flow += f" -> {key}"
-            # 保存整个streaming chunk
+            # 保存整个streaming chunk (deubg)
             self.stream_chunk.append(chunk)
 
         self.stream_flow = stream_flow
@@ -310,8 +313,10 @@ class GameAgent:
     def _welcome_state(self, state: GameState) -> Dict:
         """欢迎状态节点"""
         print("[welcome_state] 进入欢迎状态节点")
+        who_first = "player" # 决定谁先?
         return {
-            "messages": AIMessage(content=f"_welcome_state {datetime.now()}")
+            "messages": AIMessage(content=f"_welcome_state {datetime.now()}"),
+            "current_turn": who_first
         }
     
     def _route_state(self, state: GameState) -> Dict:
@@ -319,10 +324,8 @@ class GameAgent:
         print("[route_state] 进入路由节点")
         
         updates = {}
-        if state["current_turn"] == "start":
-            updates["current_turn"] = "player"
 
-        if state["current_turn"] == "player" or state["current_turn"] == "start":
+        if state["current_turn"] == "player":
             updates.update({
                 "valid_actions": ["play", "end_turn", "game_over"],
                 "info": "请选择行动"
@@ -351,6 +354,9 @@ class GameAgent:
             str: 下一个节点名称
         """
         print("[route_condition] 进入路由条件节点", state["current_turn"], "last_action:", state["last_action"])
+
+        if state["last_action"] == "chat":
+            return "chat"
 
         if state["game_over"]:
             return "end"
@@ -387,6 +393,8 @@ class GameAgent:
                 "game_over": True,
                 "info": "游戏结束"
             })
+        elif action == "chat":
+            print("[player_turn] chat action", state["info"])
         else:
             updates["info"] = f"未知操作: {action}"
 
@@ -414,4 +422,21 @@ class GameAgent:
             "current_turn": "end_game",
             "info": "游戏结束",
             "game_over": True
-        } 
+        }
+    
+    def _chat_state(self, state: GameState) -> Dict:
+        """聊天状态节点"""
+        user_message = state['info']
+        
+        print("[chat_state] 进入聊天状态节点:", user_message)
+        add_assistant_message(f"[chat_state] 进入聊天状态节点 response {user_message}")
+        
+        # return Command(goto="welcome", update={
+        #     "messages": [AIMessage(content=f"_chat_state response {datetime.now()}")],
+        #     "current_turn": "player"
+        # })
+        return {
+            "messages": [AIMessage(content=f"_chat_state response {datetime.now()}")],
+            "current_turn": "player",
+            "last_action": None
+        }

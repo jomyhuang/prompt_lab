@@ -31,6 +31,9 @@ LLM_interaction 不同模版注入
 或是定义给搭配给agent tool使用?
 
 
+graph.get_state(thread).values (取值?)
+goto模式与condition的冲突
+
 ## todo:
 
 
@@ -63,17 +66,8 @@ LLM_interaction 不同模版注入
 
 [x]- 测试messages: Annotated[list, add_messages]
 在stream模式下, 更新message异常.
-
-node函数的规范:
 1. 每个node的输出, 都确保只更新该node的输出, 不要更新全部的state.
-2. 采取的方式很多种, 比如: dict.updates()
-3. 使用Annotated类型, 使用reducer更新(参考set_game_state_from_stream)
-
-在stream_mode=“updates”的更新机制:
-1. 每个node的输出, 都确保只更新该node的输出, 不要更新全部的state.
-2. 因为默认是只输出更新的部分, 所以采取了复写整个state
-
-
+2. 同步更新GUI state的方式
 
 1/18 0.2.60
 streaming 下(测试invoke模式是正确的)
