@@ -9,9 +9,8 @@ from agent_tool import add_system_message, add_user_message, add_assistant_messa
 from dataclasses import dataclass
 from datetime import datetime
 import logging
-import uuid
 import random
-import json
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -71,12 +70,13 @@ class GameAgent:
 
         self.checkpointer = checkpointer
         self.thread_id = thread_id
-        self.game_state = self.init_game_state()
+        self._game_state = self.init_game_state()
         self.graph = self.build_graph()
         self.interrupt_state = None
         self.stream_chunk = []
         self.stream_flow = None
         self.stream_current_node = None
+        self.is_new_player_turn = False
        
     def init_game_state(self) -> GameState:
         """初始化游戏状态"""
@@ -128,13 +128,13 @@ class GameAgent:
                 {
                     "player": "player_turn",
                     "ai": "ai_turn",
-                    "chat": "chat",
+                    # "chat": "chat",
                     "end": "end"
                 }
             )
-            graph_builder.add_edge("player_turn", "route")
+            # graph_builder.add_edge("player_turn", "route")
             graph_builder.add_edge("ai_turn", "route")
-            graph_builder.add_edge("chat", "route")
+            # graph_builder.add_edge("chat", "route")
             graph_builder.add_edge("end", END)
 
             if not self.checkpointer:
@@ -149,7 +149,7 @@ class GameAgent:
 
     def run_agent(self, state: GameState=None, config: dict=None) -> GameState:
         if state is None:
-            state = self.get_game_state()
+            state = {}
 
         if config is None:
             config = {"configurable": {"thread_id": self.thread_id}}
@@ -175,7 +175,7 @@ class GameAgent:
 
     def run_agent_stream(self, state: GameState=None, config: dict=None):
         if state is None:
-            state = self.get_game_state()
+            state = {}
 
         if config is None:
             config = {"configurable": {"thread_id": self.thread_id}}
@@ -243,33 +243,25 @@ class GameAgent:
 
     def get_game_state(self) -> GameState:
         """获取当前游戏状态"""
-        return self.game_state
+        return self._game_state
 
     def set_game_state(self, state: GameState):
         """设置当前游戏状态"""
         if self.validate_state(state):
-            self.game_state = state
+            self._game_state = state
             logger.info("game_state set: new value")
 
     def set_game_state_from_stream(self, state: GameState):
-        """设置当前游戏状态(从stream中获取)
-        
-        支持:
-        1. 普通dict使用update方式更新
-        2. Annotated类型使用对应的reducer更新
-        """
+        """设置当前游戏状态(从stream中获取)"""
         try:
             for key, value in state.items():
-                # 从GameState类定义获取字段类型
                 field_type = GameState.__annotations__.get(key, None)
                 if hasattr(field_type, "__metadata__") and field_type.__metadata__:
-                    # 使用reducer更新Annotated字段
                     reducer = field_type.__metadata__[0]
-                    current_value = self.game_state.get(key, [])
-                    self.game_state[key] = reducer(current_value, value)
+                    current_value = self._game_state.get(key, [])
+                    self._game_state[key] = reducer(current_value, value)
                 else:
-                    # 普通字段直接更新
-                    self.game_state[key] = value
+                    self._game_state[key] = value
                     
             logger.info("game_state set from stream: updated successfully")
         except Exception as e:
@@ -314,6 +306,8 @@ class GameAgent:
         """欢迎状态节点"""
         print("[welcome_state] 进入欢迎状态节点")
         who_first = "player" # 决定谁先?
+        self.is_new_player_turn = True
+
         return {
             "messages": AIMessage(content=f"_welcome_state {datetime.now()}"),
             "current_turn": who_first
@@ -341,7 +335,8 @@ class GameAgent:
                 "info": f"unknown route current_turn {state['current_turn']}"
             })
 
-        updates["messages"] = [AIMessage(content=f"_route_state {datetime.now()}")]
+        # updates["messages"] = [AIMessage(content=f"_route_state {datetime.now()}")]
+        updates["messages"] = state["messages"][-3:]
         return updates
     
     def _route_condition(self, state: GameState) -> str:
@@ -353,10 +348,12 @@ class GameAgent:
         Returns:
             str: 下一个节点名称
         """
+        # print("[route_condition] 进入路由条件节点", state["current_turn"])
+        # print(state)
         print("[route_condition] 进入路由条件节点", state["current_turn"], "last_action:", state["last_action"])
 
-        if state["last_action"] == "chat":
-            return "chat"
+        # if state["last_action"] == "chat":
+        #     return "chat"
 
         if state["game_over"]:
             return "end"
@@ -369,45 +366,96 @@ class GameAgent:
         """玩家回合处理"""
         print("[player_turn] 进入玩家回合节点")
         
+        player_info = "玩家回合开始" if self.is_new_player_turn else "玩家回合继续"
         game_info = {
             "valid_actions": state["valid_actions"],
             "game_data": state["game_data"],
-            "message": AIMessage(content="玩家回合开始")
+            "message": AIMessage(content=player_info)
         }
         
-        updates = {"info": "玩家回合开始"}
+        updates = {"info": player_info}
         
         print("[player_turn] Before interrupt ----")
         self._run_agent_interrupt(game_info)
         action = interrupt(game_info)
         print("[player_turn] After interrupt ----", action)
         updates["last_action"] = action
-        
+        self.is_new_player_turn = False
+
         if action == "end_turn":
-            updates.update({
+            self.is_new_player_turn = True
+            return Command(goto="route", update={
                 "current_turn": "ai",
                 "info": "回合结束"
             })
         elif action == "game_over":
-            updates.update({
+            return Command(goto="route", update={
                 "game_over": True,
                 "info": "游戏结束"
             })
         elif action == "chat":
-            print("[player_turn] chat action", state["info"])
+            # print("[player_turn] chat action", state["info"])
+            # goto进入其他node后同样使用goto返回
+            return Command(goto="chat",
+                        update={"info": state["info"]})
         else:
             updates["info"] = f"未知操作: {action}"
 
         updates["messages"] = [AIMessage(content=f"_player_turn {datetime.now()}")]
-        return updates
+        return Command(goto="player_turn",
+                        update=updates)
+    
+    # 参考设计模式: route 模式, 采用 last_action 在route中判断, 从condition_edge中跳转
+    # def _player_turn(self, state: GameState) -> Dict:
+    #     """玩家回合处理"""
+    #     print("[player_turn] 进入玩家回合节点")
+        
+    #     game_info = {
+    #         "valid_actions": state["valid_actions"],
+    #         "game_data": state["game_data"],
+    #         "message": AIMessage(content="玩家回合开始")
+    #     }
+        
+    #     updates = {"info": "玩家回合开始"}
+        
+    #     print("[player_turn] Before interrupt ----")
+    #     self._run_agent_interrupt(game_info)
+    #     action = interrupt(game_info)
+    #     print("[player_turn] After interrupt ----", action)
+    #     updates["last_action"] = action
+        
+    #     if action == "end_turn":
+    #         updates.update({
+    #             "current_turn": "ai",
+    #             "info": "回合结束"
+    #         })
+    #     elif action == "game_over":
+    #         updates.update({
+    #             "game_over": True,
+    #             "info": "游戏结束"
+    #         })
+    #     elif action == "chat":
+    #         print("[player_turn] chat action", state["info"])
+    #     else:
+    #         updates["info"] = f"未知操作: {action}"
+
+    #     updates["messages"] = [AIMessage(content=f"_player_turn {datetime.now()}")]
+    #     return updates
     
     def _ai_turn(self, state: GameState) -> Dict:
         """AI回合处理"""
         print("[ai_turn] 进入AI回合节点")
         
         add_assistant_message("AI行动")
+        time.sleep(1)
+        
+        # 处理AI回合Agent
+
+        ai_info = "AI回合结束"
+        add_assistant_message(ai_info)
+
         return {
-            "info": "AI回合结束",
+            "info": ai_info,
             "current_turn": "player",
             "messages": [AIMessage(content=f"_ai_turn {datetime.now()}")]
         }
@@ -431,12 +479,14 @@ class GameAgent:
         print("[chat_state] 进入聊天状态节点:", user_message)
         add_assistant_message(f"[chat_state] 进入聊天状态节点 response {user_message}")
         
-        # return Command(goto="welcome", update={
+        return Command(goto="player_turn", update={
+            "messages": AIMessage(content=f"_chat_state response {datetime.now()}"),
+            # "current_turn": "player",
+            # "last_action": None (返回None值,key被删除)
+            "last_action": ""
+        })
+        # return {
         #     "messages": [AIMessage(content=f"_chat_state response {datetime.now()}")],
-        #     "current_turn": "player"
-        # })
-        return {
-            "messages": [AIMessage(content=f"_chat_state response {datetime.now()}")],
-            "current_turn": "player",
-            "last_action": None
-        }
+        #     "current_turn": "player",
+        #     "last_action": None
+        # }

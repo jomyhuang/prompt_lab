@@ -31,22 +31,28 @@ def _init_session_state():
         # 游戏逻辑状态管理器
         st.session_state.initialized = True
         st.session_state.llm_interaction = LLMInteraction()  # LLM交互管理器
-        st.session_state.messages = []  # 聊天历史记录
         st.session_state.thread_id = None  # LangGraph线程ID
         st.session_state.checkpointer = None  # LangGraph状态检查点
         st.session_state.config = None  # LangGraph配置
+        st.session_state.game_agent = None  # 游戏Agent实例
+        st.session_state.streaming = True
+        st.session_state.debug = None
         
         # GUI状态管理
+        st.session_state.messages = []  # 聊天历史记录
         st.session_state.game_started = False  # 游戏是否开始标志
-        st.session_state.player_info = {}  # 玩家信息存储
-        st.session_state.current_message = "欢迎来到游戏!"  # 当前显示消息
+        # st.session_state.player_info = {}       # 玩家信息存储
+        # st.session_state.current_message = "欢迎来到游戏!"  # 当前显示消息
         st.session_state._user_chat_input = None  # 用户输入缓存
         st.session_state.require_update = False  # GUI更新标志
         st.session_state.require_update_chat = False  # 新对话更新标志
         st.session_state.processing_state = False  # 状态处理标志
-        st.session_state.game_agent = None  # 游戏Agent实例
-        st.session_state.streaming = True
-        st.session_state.debug = None
+
+        # === 修改 GUI 反馈标记 ===
+        st.session_state.gui_feedback = None  # GUI反馈信号
+        st.session_state.gui_feedback_params = {}  # GUI反馈的附加参数
+        st.session_state.agent_autogui = False
+        # === 修改代码结束 ===
 
         # 配置日志
         logging.basicConfig(
@@ -62,12 +68,6 @@ def _init_session_state():
 
         add_system_message("欢迎来到游戏!")
         logger.info("_init_session_state Initialized")
-
-        # === 修改 GUI 反馈标记 ===
-        st.session_state.gui_feedback = None  # GUI反馈信号
-        st.session_state.gui_feedback_params = {}  # GUI反馈的附加参数
-        st.session_state.agent_autogui = False
-        # === 修改代码结束 ===
 
 def _init_game_agent():
     """初始化游戏Agent工作流
@@ -154,6 +154,15 @@ def process_command_input(user_input: str):
     # 更新游戏状态
     # st.session_state.game_agent.update_state(result, game_action)
     # st.session_state.require_update = True
+
+def _debug_game_state():
+    game_state = st.session_state.game_agent.get_game_state()
+    game_agent = st.session_state.game_agent
+
+    st.session_state.debug = game_agent.graph.get_state(st.session_state.config)
+
+    st.write("debug game state")
+    st.json(st.session_state.debug, expanded=3)
 
 # 核心逻辑代码, 不能任意修改 === 代码开始
 def _process_streaming_agent() -> bool:
@@ -452,6 +461,10 @@ def main():
     # 3. 渲染游戏区
     with game_col:
         render_game_view()
+
+        debug_button = st.button("debug")
+        if debug_button:
+            _debug_game_state()
     
     # 4. 处理状态更新
     if _process_game_loop() or st.session_state.require_update:

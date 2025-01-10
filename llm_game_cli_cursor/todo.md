@@ -22,17 +22,52 @@ https://docs.streamlit.io/develop/tutorials/llms/build-conversational-apps
 ##thinking topic:
 GUI-LangGraph Agent的框架关系处理
 UI - state messages 相互的关系
-在AI turn过程中,如果更新message,跟HIL
 
-route处理turn switch, 还是需要一个end_turn node
-tool 放在node在哪里(理论上在route)?
+AutoUI处理 - 
+自动处理Agent结束后,需要自动更新的UI, 然后再进入HIL
+
+turn switch 处理 -
+由 _player_turn 跟 _ai_turn 自己处理
+
 
 LLM_interaction 不同模版注入
 或是定义给搭配给agent tool使用?
+Runnalable configurate study 
 
 
+处理messages 的流动
+所有的message都要上GUI的chat_view 或两个flow?
+- 提示信息
+- 游戏交互反馈
+- 来自chat类agent的反馈
+
+
+都往main pool更新,不需要经过game agent
+保持独立性
+跟对话性(两个agent直接的对话)
+
+
+合成对话指令
+更精确(通过chat-tool)的执行
+或是/ 跳过chat执行,直接执行tool(或代码)
+
+
+def agent(state) -> Command[Literal["agent", "another_agent"]]:
+def agent(state) -> Literal["agent", "another_agent"]:
+
+
+思考需要mock session 同步问题,如果可以直接取值
 graph.get_state(thread).values (取值?)
-goto模式与condition的冲突
+
+
+chat+tool 放在node在哪里(理论上在route)?
+在player node 跳转后返回
+
+main agent如何挂入assiant (chat)
+更新gameboard是?
+“游戏”主体是?
+
+
 
 ## todo:
 
@@ -67,23 +102,17 @@ goto模式与condition的冲突
 [x]- 测试messages: Annotated[list, add_messages]
 在stream模式下, 更新message异常.
 1. 每个node的输出, 都确保只更新该node的输出, 不要更新全部的state.
-2. 同步更新GUI state的方式
+2. 同步更新GUI state的方式(支持Annotated[list, add_messages])
 
 1/18 0.2.60
 streaming 下(测试invoke模式是正确的)
 Annotated[list, add_messages]
 异常 
 
-add_messages 支持 []
-state["messages"]= [AIMessage(content=f"_welcome_state {datetime.now()}")]
-or/ 都可以
-AIMessage(content=f"_init_state {datetime.now()}")
-
 1. init + welcome 可以正常
 2. route 异常,变成全部overwrite
 3. player_turn, 变成全部overwrite
 4. 如果有个node没有message, 则会出现所有信息(异常)
-
 
 [x]- BUG FIX: json.dump 无法处理 messages Annotated下, HumanMessage..特别格式
 不需要处理直接注入, 但要注意是tuples类型
@@ -102,6 +131,12 @@ how-to-guide 中文
 https://github.com/jurnea/LangGraph-Chinese/blob/master/HowtoGuides.md
 
 
+
+## tips, codeblocks
+1. add_messages 支持 []
+state["messages"]= [AIMessage(content=f"_welcome_state {datetime.now()}")]
+or/ 都可以
+AIMessage(content=f"_init_state {datetime.now()}")
 
 
 
