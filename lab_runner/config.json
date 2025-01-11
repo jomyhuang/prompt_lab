@@ -2,8 +2,7 @@
     "temperature": 0.0,
     "selected_vendor_name": "SMALLAI",
     "selected_models": [
-        "Doubao-pro-128k",
-        "deepseek-chat"
+        "gpt-3.5-turbo"
     ],
-    "selected_prompt_project": "建造系统"
+    "selected_prompt_project": "数组定义"
 }

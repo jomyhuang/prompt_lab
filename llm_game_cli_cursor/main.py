@@ -27,24 +27,26 @@ def _init_session_state():
     - 当前消息
     - 界面更新标志
     - 处理状态标志
+    
+    注意：此函数仅在session_state未初始化时执行
     """
     if "initialized" not in st.session_state:
         # 游戏逻辑状态管理器
         st.session_state.initialized = True
-        # st.session_state.llm_interaction = LLMInteraction()  # 原LLM交互管理器
+        # st.session_state.llm_interaction = LLMInteraction()  # 原LLM交互管理器（已注释）
         st.session_state.llm_graph = LLMGraph()  # 新的LLM Graph交互管理器
         st.session_state.thread_id = None  # LangGraph线程ID
         st.session_state.checkpointer = None  # LangGraph状态检查点
         st.session_state.config = None  # LangGraph配置
         st.session_state.game_agent = None  # 游戏Agent实例
-        st.session_state.streaming = False
-        st.session_state.debug = None
+        st.session_state.streaming = True  # 流式处理标志
+        st.session_state.debug = None  # 调试信息
         
         # GUI状态管理
         st.session_state.messages = []  # 聊天历史记录
         st.session_state.game_started = False  # 游戏是否开始标志
-        # st.session_state.player_info = {}       # 玩家信息存储
-        # st.session_state.current_message = "欢迎来到游戏!"  # 当前显示消息
+        # st.session_state.player_info = {}       # 玩家信息存储（已注释）
+        # st.session_state.current_message = "欢迎来到游戏!"  # 当前显示消息（已注释）
         st.session_state._user_chat_input = None  # 用户输入缓存
         st.session_state.require_update = False  # GUI更新标志
         st.session_state.require_update_chat = False  # 新对话更新标志
@@ -53,13 +55,13 @@ def _init_session_state():
         # === 修改 GUI 反馈标记 ===
         st.session_state.gui_feedback = None  # GUI反馈信号
         st.session_state.gui_feedback_params = {}  # GUI反馈的附加参数
-        st.session_state.agent_autogui = False
+        st.session_state.agent_autogui = False  # Agent自动GUI更新标志
         # === 修改代码结束 ===
 
         # 配置日志
         logging.basicConfig(
             level=logging.INFO,
-            # format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            # format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'（已注释）
             format='%(levelname)s - %(message)s',
             force=True
         )
@@ -426,6 +428,8 @@ def main():
     - 创建游戏Agent
     - 渲染主界面
     - 处理游戏循环
+    
+    注意：此函数是Streamlit应用的入口，会被重复调用
     """
     # 设置页面配置
     st.set_page_config(
