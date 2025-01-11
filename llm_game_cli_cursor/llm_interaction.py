@@ -9,14 +9,26 @@ import logging
 from typing import List, Dict, Any, Optional
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 import asyncio
-
+from agent_tool import init_my_model
 # 加载环境变量
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+
+PROMPT_BASIC_GAMEASSISTANT = """
+你是一个游戏AI助手。基于以下信息帮助玩家：            
+当前游戏状态:
+{game_state}
+聊天历史:
+{chat_history}
+玩家输入:
+{user_input}
+请分析情况并给出建议或执行相应操作。
+"""
+
 class LLMInteraction:
-    """LLM交互管理器
+    """支持GameAgent的LLM交互管理器
     
     处理与大语言模型的交互，包括:
     1. 初始化和配置LLM模型
@@ -25,7 +37,7 @@ class LLMInteraction:
     4. 解析用户命令
     5. 维护上下文
     """
-    
+
     def __init__(self):
         """初始化LLM交互管理器
         
@@ -36,152 +48,15 @@ class LLMInteraction:
         4. 创建对话处理链
         """
         
-        # 初始化LLM模型
+        # 初始化LLM模型, 简化模型选择
         use_model = "deepseek"  # 可选: google, openai, deepseek
-        
-        if use_model == "google":
-            model = "gemini-pro"
-            self.llm = ChatGoogleGenerativeAI(
-                api_key=os.getenv("GOOGLE_API_KEY"),
-                model=model,
-                temperature=0,
-                streaming=True
-            )
-            logger.info(f"使用Gemini模型 {model}")
-            
-        elif use_model == "deepseek":
-            model = "deepseek-chat"
-            base_url = os.getenv("DEEPSEEK_API_BASE")
-            self.llm = ChatOpenAI(
-                api_key=os.getenv("DEEPSEEK_API_KEY"),
-                model=model,
-                base_url=base_url,
-                temperature=0,
-                streaming=True
-            )
-            logger.info(f"使用DeepSeek模型 {model}")
-            
-        else:  # openai
-            model = "gpt-3.5-turbo"
-            base_url = os.getenv("OPENAI_API_BASE")
-            self.llm = ChatOpenAI(
-                api_key=os.getenv("OPENAI_API_KEY"),
-                model=model,
-                base_url=base_url,
-                temperature=0,
-                streaming=True
-            )
-            logger.info(f"使用OpenAI模型 {model}")
+        self.llm = init_my_model(use_model)
         
         # 初始化对话历史
         self.chat_history = []
         self.last_game_state = None
         self.commands_processor = None
-        
-        # 设置上下文提示模板
-        self.context_prompt = ChatPromptTemplate.from_template(
-            """你是一个游戏AI助手。基于以下信息帮助玩家：
-            
-            当前游戏状态:
-            {game_state}
-            
-            聊天历史:
-            {chat_history}
-            
-            玩家输入:
-            {user_input}
-            
-            请分析情况并给出建议或执行相应操作。
-            """
-        )
-        
-        # 创建对话链
-        self.context_chain = self.context_prompt | self.llm
-    
-    def generate_ai_response(self, user_input: str, game_state: dict) -> str:
-        """生成AI响应
-        
-        处理流程:
-        1. 准备上下文信息
-        2. 调用LLM生成响应
-        3. 处理响应格式
-        4. 更新对话历史
-        
-        Args:
-            user_input: 用户输入文本
-            game_state: 当前游戏状态
-            
-        Returns:
-            str: 生成的AI响应
-        """
- 
-        # 准备上下文
-        # print(f"[generate_ai_response] game_state:", game_state)
-        # BUG FIX: TypeError: Object of type HumanMessage is not JSON serializable
-        # JSON 序列化失败, 有可能是 HumanMessage 类型的问题
-        try:
-            game_state_input = json.dumps(game_state, ensure_ascii=False, indent=2)
-        except:
-            logger.error(f"[generate_ai_response] game_state_input json.dumps error: {game_state}")
-            game_state_input = ""
 
-        context = {
-            "game_state": game_state_input,
-            "chat_history": self.format_history(),
-            "user_input": user_input
-        }
-        
-        # 生成响应
-        response = self.context_chain.invoke(context)
-        # response = AIMessage(content="[generate_ai_response] test response")
-        # print(f"[generate_ai_response] response ---- {response}")
-        # content = response.content
-        content = response.content
-
-        # # 如果内容是列表，取第一个非空元素
-        # if isinstance(content, list):
-        #     content = next((item for item in content if item), "")
-    
-        # 更新对话历史 (llm_interaction保留对话上下文)
-        self.add_to_history("user", user_input)
-        self.add_to_history("assistant", content)
-    
-        return content
- 
-    def generate_ai_response_stream(self, user_input: str, game_state: dict):
-        """生成AI响应 streaming 测试
-        
-        Args:
-            user_input: 用户输入
-            game_state: 当前游戏状态
-            
-        Returns:
-            str: AI的响应
-        """
-
-        # 准备上下文
-        # print(f"[generate_ai_response] game_state:", game_state)
-        # BUG FIX: TypeError: Object of type HumanMessage is not JSON serializable
-        # JSON 序列化失败, 有可能是 HumanMessage 类型的问题
-        # try:
-        #     game_state_input = json.dumps(game_state, ensure_ascii=False, indent=2)
-        # except:
-        #     logger.error(f"[generate_ai_response_stream] game_state_input json.dumps error: {game_state}")
-        #     game_state_input = ""
-
-        # TODO: 筛选game_state, 减少token、减少messages对话次数, 还有隐藏的游戏信息不要给LLM
-
-        context = {
-            # 直接传入state,或是messages. 不需要使用json.dump (不需要解析)
-            # "game_state": game_state["messages"],
-            "game_state": game_state,
-            "chat_history": self.format_history(),
-            "user_input": user_input
-        }
-        
-        # 生成响应
-        return self.context_chain.stream(context)
-    
     def format_history(self) -> str:
         """格式化聊天历史
         
@@ -203,7 +78,97 @@ class LLMInteraction:
         self.chat_history.append({"role": role, "content": content})
         if len(self.chat_history) > 10:  # 限制历史记录长度
             self.chat_history.pop(0)
+
+    def clear_history(self):
+        """清除对话历史"""
+        self.chat_history = []
     
+    def get_chat_history(self) -> List[Dict[str, str]]:
+        """获取对话历史
+        
+        Returns:
+            List[Dict[str, str]]: 对话历史记录
+        """
+        return self.chat_history 
+
+    def generate_ai_response(self, user_input: str, game_state: dict = {}, streaming:bool=False) -> str:
+        """生成AI响应
+        
+        处理流程:
+        1. 准备上下文信息
+        2. 调用LLM生成响应
+        3. 处理响应格式
+        4. 更新对话历史
+        
+        Args:
+            user_input: 用户输入文本
+            game_state: 当前游戏状态
+            
+        Returns:
+            str: 生成的AI响应
+        """
+        # 设置上下文提示模板
+        self.context_prompt = ChatPromptTemplate.from_template(
+            PROMPT_BASIC_GAMEASSISTANT
+        )
+
+        # 创建对话链
+        self.context_chain = self.context_prompt | self.llm
+ 
+        # 准备上下文
+        # BUG: TypeError: Object of type HumanMessage is not JSON serializable
+        # JSON 序列化失败, 有可能是 HumanMessage 类型的问题
+        # 不使用json.dumps, 直接传入game_state
+        # try:
+        #     game_state_input = json.dumps(game_state, ensure_ascii=False, indent=2)
+        # except:
+        #     logger.error(f"[generate_ai_response] game_state_input json.dumps error: {game_state}")
+        #     game_state_input = ""
+
+        input_state = {
+            "game_started": game_state.get("game_started", False),
+            "current_turn": game_state.get("current_turn", "player"),
+            # "messages": game_state.get("messages", []),
+            "game_over": game_state.get("game_over", False),
+            "game_data": game_state.get("game_data", {}),
+            # "last_action": game_state.get("last_action", ""),
+            "phase": game_state.get("phase", "phase"),
+            "valid_actions": game_state.get("valid_actions", []),
+            "error": game_state.get("error", ""),
+            "info": game_state.get("info", "")
+        }
+
+        context = {
+            "game_state": input_state,
+            "chat_history": self.format_history(),
+            "user_input": user_input
+        }
+        
+        if streaming:
+            # ISSUE: 流式输出时, 对话历史没有更新
+            # # 更新对话历史 (llm_interaction保留对话上下文)
+            # self.add_to_history("user", user_input)
+            # self.add_to_history("assistant", content)
+            return self.context_chain.stream(context)
+        else:
+            # 生成响应
+            response = self.context_chain.invoke(context)
+            content = response.content
+
+            # 如果内容是列表，取第一个非空元素
+            if isinstance(content, list):
+                content = next((item for item in content if item), "")
+    
+            # 更新对话历史 (llm_interaction保留对话上下文)
+            self.add_to_history("user", user_input)
+            self.add_to_history("assistant", content)
+    
+            return content
+ 
+    def generate_ai_response_stream(self, user_input: str, game_state: dict):
+        return self.generate_ai_response(user_input, game_state, streaming=True)
+
+
     def parse_user_action(self, user_input: str) -> Dict[str, Any]:
         """解析用户输入为游戏动作
         
@@ -260,15 +225,3 @@ class LLMInteraction:
         except Exception as e:
             logger.error(f"Failed to parse user action: {str(e)}")
             return {"action": "error", "target": None, "parameters": {}}
-    
-    def clear_history(self):
-        """清除对话历史"""
-        self.chat_history = []
-    
-    def get_chat_history(self) -> List[Dict[str, str]]:
-        """获取对话历史
-        
-        Returns:
-            List[Dict[str, str]]: 对话历史记录
-        """
-        return self.chat_history 

@@ -3,7 +3,7 @@ from typing import Dict, Any, Optional, List, TypedDict, Annotated
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import interrupt, Command
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, RemoveMessage
 from langgraph.graph.message import add_messages
 from agent_tool import add_system_message, add_user_message, add_assistant_message
 from dataclasses import dataclass
@@ -70,6 +70,7 @@ class GameAgent:
 
         self.checkpointer = checkpointer
         self.thread_id = thread_id
+        self.config = {"configurable": {"thread_id": self.thread_id}}
         self._game_state = self.init_game_state()
         self.graph = self.build_graph()
         self.interrupt_state = None
@@ -91,8 +92,8 @@ class GameAgent:
             phase="phase",
             valid_actions=["start"],
             thread_id=self.thread_id,
-            error=None,
-            info=None
+            error="",
+            info=""
         )
 
     def build_graph(self) -> StateGraph:
@@ -243,30 +244,37 @@ class GameAgent:
 
     def get_game_state(self) -> GameState:
         """获取当前游戏状态"""
-        return self._game_state
+        if self.graph is None:
+            # return self._game_state
+            # return {}
+            raise ValueError("[get_game_state] error, graph is None")
+        else:
+            return self.graph.get_state(self.config).values
 
     def set_game_state(self, state: GameState):
         """设置当前游戏状态"""
-        if self.validate_state(state):
-            self._game_state = state
-            logger.info("game_state set: new value")
+        # if self.validate_state(state):
+        #     self._game_state = state
+        #     logger.info("game_state set: new value")
+        pass
 
     def set_game_state_from_stream(self, state: GameState):
         """设置当前游戏状态(从stream中获取)"""
-        try:
-            for key, value in state.items():
-                field_type = GameState.__annotations__.get(key, None)
-                if hasattr(field_type, "__metadata__") and field_type.__metadata__:
-                    reducer = field_type.__metadata__[0]
-                    current_value = self._game_state.get(key, [])
-                    self._game_state[key] = reducer(current_value, value)
-                else:
-                    self._game_state[key] = value
+        # try:
+        #     for key, value in state.items():
+        #         field_type = GameState.__annotations__.get(key, None)
+        #         if hasattr(field_type, "__metadata__") and field_type.__metadata__:
+        #             reducer = field_type.__metadata__[0]
+        #             current_value = self._game_state.get(key, [])
+        #             self._game_state[key] = reducer(current_value, value)
+        #         else:
+        #             self._game_state[key] = value
                     
-            logger.info("game_state set from stream: updated successfully")
-        except Exception as e:
-            logger.error(f"Failed to update game state from stream: {str(e)}")
-            raise
+        #     logger.info("game_state set from stream: updated successfully")
+        # except Exception as e:
+        #     logger.error(f"Failed to update game state from stream: {str(e)}")
+        #     raise
+        pass
 
     def set_game_interrupt(self, info: Any = None):
         """设置当前游戏Human-in-Loop中断状态"""
@@ -336,7 +344,20 @@ class GameAgent:
             })
 
         # updates["messages"] = [AIMessage(content=f"_route_state {datetime.now()}")]
-        updates["messages"] = state["messages"][-3:]
+        # 清理消息, 注释了 annotated[list, add_messages] 移除必须使用 RemoveMessage
+        keep_last = 5
+        if len(state["messages"]) > keep_last:
+            print(f"messages len > {keep_last}, remove first message")
+
+            messages = state["messages"]
+            if len(messages) > keep_last:
+                # 创建需要删除的消息列表
+                messages_to_remove = [RemoveMessage(id=m.id) for m in messages[:-keep_last]]
+                # print("messages_to_remove", messages_to_remove)
+                updates.update({
+                    "messages": messages_to_remove
+                })
+
         return updates
     
     def _route_condition(self, state: GameState) -> str:

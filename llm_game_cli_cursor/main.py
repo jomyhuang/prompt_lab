@@ -35,7 +35,7 @@ def _init_session_state():
         st.session_state.checkpointer = None  # LangGraph状态检查点
         st.session_state.config = None  # LangGraph配置
         st.session_state.game_agent = None  # 游戏Agent实例
-        st.session_state.streaming = True
+        st.session_state.streaming = False
         st.session_state.debug = None
         
         # GUI状态管理
@@ -135,25 +135,26 @@ def process_command_input(user_input: str):
     Args:
         user_input: 用户输入
     """
-    add_user_message(user_input)
+    # add_user_message(user_input)
     
-    # 解析用户输入
-    action = st.session_state.llm_interaction.parse_user_action(user_input)
+    # # 解析用户输入
+    # action = st.session_state.llm_interaction.parse_user_action(user_input)
     
-    # 创建GameAction对象
-    game_action = GameAction(
-        action_type=action["action"],
-        player_id="player",
-        timestamp=datetime.now(),
-        data=action["parameters"]
-    )
+    # # 创建GameAction对象
+    # game_action = GameAction(
+    #     action_type=action["action"],
+    #     player_id="player",
+    #     timestamp=datetime.now(),
+    #     data=action["parameters"]
+    # )
     
-    # 获取当前状态
-    current_state = st.session_state.game_agent.get_game_state()
+    # # 获取当前状态
+    # current_state = st.session_state.game_agent.get_game_state()
     
-    # 更新游戏状态
-    # st.session_state.game_agent.update_state(result, game_action)
-    # st.session_state.require_update = True
+    # # 更新游戏状态
+    # # st.session_state.game_agent.update_state(result, game_action)
+    # # st.session_state.require_update = True
+    pass
 
 def _debug_game_state():
     game_state = st.session_state.game_agent.get_game_state()
@@ -240,7 +241,8 @@ def _process_invoke_agent() -> bool:
 
     # 1. 游戏启动处理
     require_update = False
-    if st.session_state.game_started and not game_agent.get_game_state()["game_started"]:
+    if st.session_state.game_started and st.session_state.gui_feedback == "start":
+    # if st.session_state.game_started and not game_agent.get_game_state()["game_started"]:
         logger.info("[_process_invoke_agent] Starting game workflow")
         init_state = game_agent.init_game_state()
         game_agent.run_agent(init_state)
