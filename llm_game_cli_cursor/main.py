@@ -5,7 +5,8 @@ import asyncio
 from typing import Optional
 from datetime import datetime
 from game_agent import GameAgent, GameAction
-from llm_interaction import LLMInteraction
+# from llm_interaction import LLMInteraction  # 原LLM交互管理器
+from llm_graph import LLMGraph  # 新的LLM Graph交互管理器
 from agent_tool import add_system_message, add_user_message, add_assistant_message
 from games.base_game import render_game_view, render_action_view
 from langgraph.checkpoint.memory import MemorySaver
@@ -30,7 +31,8 @@ def _init_session_state():
     if "initialized" not in st.session_state:
         # 游戏逻辑状态管理器
         st.session_state.initialized = True
-        st.session_state.llm_interaction = LLMInteraction()  # LLM交互管理器
+        # st.session_state.llm_interaction = LLMInteraction()  # 原LLM交互管理器
+        st.session_state.llm_graph = LLMGraph()  # 新的LLM Graph交互管理器
         st.session_state.thread_id = None  # LangGraph线程ID
         st.session_state.checkpointer = None  # LangGraph状态检查点
         st.session_state.config = None  # LangGraph配置
@@ -372,10 +374,16 @@ def render_chat_view():
             # 1-1.测试stream对话输出
             game_state = st.session_state.game_agent.get_game_state()
             with st.chat_message("assistant"):
+                # response = st.write_stream(
+                #     st.session_state.llm_interaction.generate_ai_response_stream(
+                #         st.session_state._user_chat_input,game_state
+                # ))
                 response = st.write_stream(
-                    st.session_state.llm_interaction.generate_ai_response_stream(
-                        st.session_state._user_chat_input,game_state
-            ))
+                    st.session_state.llm_graph.generate_response(
+                        st.session_state._user_chat_input,
+                        game_state,
+                        streaming=True
+                ))
             # 1-2.标准输出(代码不能删除)
             # response = st.session_state.llm_interaction.generate_ai_response(
             #             st.session_state._user_chat_input,game_state
