@@ -1,6 +1,6 @@
 # Prompt Lab (提示词实验室)
 
-这是一个专注于LLM(大语言模型)提示词工程的实验项目，用于开发、测试和优化各类AI模型的提示词系统。
+personal LLM prompt engineering project. Uses Langchain, LangGraph, Streamlit. Explores AI via chat-based game case studies.
 
 ## 项目特点
 
