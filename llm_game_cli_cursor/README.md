@@ -2,6 +2,8 @@
 
 基于 LangGraph 和 Streamlit 构建的 LLM 游戏框架。
 
+# 2025-01-12 V0.5 Tag
+
 ## 项目结构
 
 ```
