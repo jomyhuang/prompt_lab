@@ -38,7 +38,7 @@ conda activate prompt_lab
 
 ### 2. 配置API密钥
 
-创建`lab_runner/.env`文件：
+创建`.env`文件：
 
 ```env
 OPENAI_API_KEY=你的OpenAI API密钥
@@ -50,91 +50,81 @@ PROMPT_DIR=prompt_engineering
 TEMPERATURE=0.7
 ```
 
-### 3. 运行测试
+## 子项目详细说明
 
-```bash
-# 运行基础连接测试
-python lab_runner/test_langchain_connection.py
+### 1. lab_runner (提示词测试运行器)
 
-# 运行提示词测试
-python lab_runner/prompt_test_runner.py
-```
+核心功能模块：
+- `streamlit_prompt_test_runner.py`: 基于Streamlit的GUI测试界面
+  - 多模型切换与配置
+  - 提示词项目管理
+  - 测试用例批量运行
+  - 实时结果展示
+- `prompt_test_runner.py`: 核心测试引擎
+  - 提示词解析与处理
+  - 测试用例执行
+  - 结果分析与评估
+- `test_langchain_connection.py`: 模型连接测试
+- `test_logs/`: 测试日志存储
+- `dev_instructions.md`: 开发指南文档
 
-## 最新更新
+配置文件：
+- `config.json`: 全局配置
+- `.env`: 环境变量配置
 
-### 2024-12-14
-- 增加了模型调用的详细日志输出功能（verbose=True）
-- 优化了界面显示，移除了侧边栏的响应内容显示
-- 改进了提示词项目切换功能，修复了测试用例选择的相关问题
-- 添加了温度（temperature）调节功能，可以通过滑动条调整模型输出的随机性
-- 实现了配置的持久化保存，包括：
-  - 选择的模型商和模型
-  - temperature 值
-  - 当前的提示词项目
+### 2. llm_cardstudio (LLM卡牌游戏工作室)
 
-### 功能说明
+核心模块：
+- 游戏引擎
+  - `game_manager.py`: 游戏核心管理器
+  - `player_manager.py`: 玩家管理系统
+  - `model_config.py`: 模型配置管理
+  
+- LLM交互系统
+  - `llm_interaction.py`: 基础LLM交互接口
+  - `llm_commands_interaction.py`: 命令系统实现
+  - `pe_commands.py`: 提示词命令处理器
 
-#### 模型配置
-- 支持多个模型服务商：OpenAI、Google（PaLM）、LLMStudio 等
-- 可调节的温度参数（temperature），范围 0-1
-- 支持详细的模型调用日志，方便调试
+- 游戏数据
+  - `cards.json`: 卡牌数据定义
+  - `decks.json`: 卡组配置
+  - `cards_commands.json`: 卡牌命令定义
 
-#### 提示词测试
-- 支持多个提示词项目的管理和切换
-- 提供测试用例的批量运行功能
-- 支持测试用例的全选/取消全选
-- 自动保存测试结果和配置
+- 界面实现
+  - `gui_main.py`: Streamlit GUI界面
+  - `debug_utils.py`: 调试工具
 
-#### 使用说明
-1. 选择模型服务商和具体模型
-2. 调整 temperature 值（0 表示结果最确定，1 表示结果最随机）
-3. 选择提示词项目
-4. 点击"加载提示词和测试用例"按钮
-5. 选择要运行的测试用例
-6. 点击"运行测试"开始测试
+- 测试驱动开发文档
+  - `tdd_pe_llm_card.md`: 卡牌系统TDD文档
+  - `tdd_gamestate.md`: 游戏状态TDD文档
+  - `tdd_gamerules.md`: 游戏规则TDD文档
 
-## 子项目说明
+### 3. llm_game_agent_template (游戏智能体模板)
 
-### lab_runner
-提示词测试运行器,用于测试和评估提示词效果:
-- 支持多模型测试环境
-- 基于 Streamlit 的可视化界面
-- 提示词测试用例管理
-- 性能分析与日志记录
+核心模块：
+- 智能体框架
+  - `game_agent.py`: 智能体核心实现
+  - `agent_tool.py`: 智能体工具集
+  - `llm_graph.py`: LangGraph流程图实现
+  - `llm_interaction.py`: LLM交互接口
 
-### langgraph_study
-基于 LangGraph 框架的多智能体应用研究:
-- 多种棋牌游戏AI实现(如战舰、21点、石头剪刀布等)
-- 智能体交互控制组件
-- 游戏规则与状态管理
+- 游戏实现
+  - `games/`: 各类游戏实现目录
+  - `main.py`: 主程序入口
 
-### llm_cardstudio
-基于大语言模型的卡牌游戏开发工作室:
-- 卡牌游戏设计与开发
-- LLM 命令交互系统
-- 游戏管理器
-- GUI界面实现
-- 完整的测试驱动开发文档
-
-### prompt_engineering
-提示词工程研究与实践:
-- 提示词模板库
-- 多场景测试用例
-- 性能评估数据
+- 开发文档
+  - `todo.md`: 开发计划
+  - `tdd_cli.md`: 命令行接口TDD文档
 
 ## 项目结构
 
 ```
 prompt_lab/
-├── lab_runner/                # 核心运行代码
-│   ├── test_langchain_connection.py
-│   └── prompt_test_runner.py
-├── prompt_engineering/        # 提示词实验
-│   ├── bot194/               # 系统性实验
-│   │   ├── 01/              # 基础实验
-│   │   └── 02/              # 进阶实验
-│   └── town1/                # 特定场景实验
-└── environment.yml           # 环境配置文件
+├── lab_runner/                # 提示词测试运行器
+├── llm_cardstudio/           # 卡牌游戏工作室
+├── llm_game_agent_template/  # 游戏智能体模板
+├── prompt_engineering/       # 提示词工程研究
+└── environment.yml          # 环境配置文件
 ```
 
 ## 测试用例编写指南
